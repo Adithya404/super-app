@@ -2,12 +2,12 @@ import "dotenv/config";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { pool } from "@/lib/db";
+import { authPool } from "@/lib/db";
 
 const migrationsDir = path.join(process.cwd(), "src/db/migrations");
 
 async function ensureMigrationTable() {
-  await pool.query(`
+  await authPool.query(`
     CREATE SCHEMA IF NOT EXISTS super;
 
     CREATE TABLE IF NOT EXISTS super.migrations (
@@ -73,7 +73,7 @@ async function runMigrations() {
     const sql = fs.readFileSync(path.join(migrationsDir, file), "utf-8");
     const checksum = hashMigration(sql);
 
-    const existing = await pool.query("SELECT checksum FROM super.migrations WHERE name = $1", [
+    const existing = await authPool.query("SELECT checksum FROM super.migrations WHERE name = $1", [
       file,
     ]);
 
@@ -92,19 +92,19 @@ async function runMigrations() {
     console.info(`Applying migration: ${file}`);
 
     try {
-      await pool.query("BEGIN");
+      await authPool.query("BEGIN");
 
-      await pool.query(sql);
+      await authPool.query(sql);
 
-      await pool.query("INSERT INTO super.migrations(name, checksum) VALUES ($1, $2)", [
+      await authPool.query("INSERT INTO super.migrations(name, checksum) VALUES ($1, $2)", [
         file,
         checksum,
       ]);
 
-      await pool.query("COMMIT");
+      await authPool.query("COMMIT");
       count = count + 1;
     } catch (error) {
-      await pool.query("ROLLBACK");
+      await authPool.query("ROLLBACK");
       console.error(`Migration failed: ${file}`);
       throw error;
     }
@@ -117,14 +117,14 @@ async function runMigrations() {
 }
 async function main() {
   // Acquire global advisory lock
-  await pool.query("SELECT pg_advisory_lock(987654321)");
+  await authPool.query("SELECT pg_advisory_lock(987654321)");
 
   try {
     await runMigrations();
   } finally {
     // Always release the lock
-    await pool.query("SELECT pg_advisory_unlock(987654321)");
-    await pool.end();
+    await authPool.query("SELECT pg_advisory_unlock(987654321)");
+    await authPool.end();
   }
 }
 

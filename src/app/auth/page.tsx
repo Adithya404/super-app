@@ -20,7 +20,6 @@ export default function AuthPage() {
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
-
     setLoading(true);
     setErrorMessage(null);
 
@@ -32,29 +31,43 @@ export default function AuthPage() {
 
     setLoading(false);
 
-    if (res?.error) {
+    if (!res?.ok || res?.error) {
       setErrorMessage("Invalid email or password");
       return;
     }
 
-    router.push("/dashboard");
+    router.push("/(secure)/tp/"); // ✅ only runs on true success
   }
-
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
-
     setLoading(true);
     setErrorMessage(null);
 
-    const res = await fetch("/api/auth/register", {
+    const res = await fetch("/api/register", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
 
+    const data = await res.json();
     setLoading(false);
 
     if (!res.ok) {
-      setErrorMessage("Unable to create account");
+      if (data.hint === "USE_GOOGLE") {
+        // Automatically trigger Google sign in for them
+        setErrorMessage("You already have an account. Continue with Google");
+        // await signIn("google", { callbackUrl: "/dashboard" });
+        return;
+      }
+
+      if (data.hint === "USE_LOGIN") {
+        // Switch them to the login tab
+        setErrorMessage("You already have an account. Please log in.");
+        //setActiveTab("login"); // see note below
+        return;
+      }
+
+      setErrorMessage(data.error || "Unable to create account");
       return;
     }
 
@@ -64,7 +77,6 @@ export default function AuthPage() {
       callbackUrl: "/dashboard",
     });
   }
-
   return (
     <div className="w-full max-w-md">
       {errorMessage && (
@@ -121,7 +133,7 @@ export default function AuthPage() {
               type="button"
               variant="outline"
               className="w-full"
-              onClick={() => signIn("google")}
+              onClick={() => signIn("google", { callbackUrl: "/tp" })}
             >
               Continue with Google
             </Button>

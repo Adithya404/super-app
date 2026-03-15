@@ -1,12 +1,14 @@
-// import { getSession } from "@/lib/auth/get-session";
+"use client";
+import { signOut } from "next-auth/react";
+import { Button } from "@/components/ui/button";
 
-export default async function Dashboard() {
-  // const session = await getSession();
-  // console.log("session", session);
-
-  // if (!session) {
-  //   redirect("/auth");
-  // }
-
-  return <>Welcome</>;
+function page() {
+  return (
+    <div>
+      page
+      <Button onClick={() => signOut({ redirectTo: "/home" })}>Sign Out</Button>
+    </div>
+  );
 }
+
+export default page;

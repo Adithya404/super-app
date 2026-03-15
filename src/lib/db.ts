@@ -1,20 +1,16 @@
+// lib/db.ts
 import { Pool } from "pg";
 
-const globalForDb = globalThis as unknown as {
-  pool: Pool | undefined;
-};
+// Auth pool — points to "super" schema
+export const authPool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
 
-export const pool =
-  globalForDb.pool ??
-  new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-  });
+authPool.on("connect", (client) => {
+  client.query('SET search_path TO "super"');
+});
 
-if (process.env.NODE_ENV !== "production") {
-  globalForDb.pool = pool;
-}
-
-export async function query(text: string, params?: unknown[]) {
-  return pool.query(text, params);
-}
+// App pool — points to your default/public schema (or any other)
+export const db = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});

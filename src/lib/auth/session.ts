@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { pool } from "@/lib/db";
+import { authPool } from "@/lib/db";
 
 export function generateSessionToken() {
   return crypto.randomBytes(32).toString("hex");
@@ -11,7 +11,7 @@ export async function createSession(userId: string) {
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
 
-  await pool.query(
+  await authPool.query(
     `
     INSERT INTO super.sessions(user_id, session_token, expires_at)
     VALUES ($1,$2,$3)
