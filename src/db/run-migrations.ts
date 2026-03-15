@@ -82,7 +82,7 @@ async function runMigrations() {
       const dbChecksum = existing.rows[0].checksum;
 
       if (dbChecksum !== checksum) {
-        throw new Error(`Chescksum mismatch for ${file}\n Aborting.`);
+        throw new Error(`Checksum mismatch for ${file}\n Aborting.`);
       }
 
       // Migration already applied and valid

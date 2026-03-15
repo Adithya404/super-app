@@ -7,7 +7,7 @@ export default function Home() {
           <h1 className="font-bold text-xl">Super Portal</h1>
 
           <div className="space-x-4">
-            <a href="/login" className="rounded-md bg-black px-4 py-2 text-white hover:bg-gray-800">
+            <a href="/auth" className="rounded-md bg-black px-4 py-2 text-white hover:bg-gray-800">
               Sign In
             </a>
           </div>
