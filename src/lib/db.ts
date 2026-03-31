@@ -11,6 +11,6 @@ authPool.on("connect", (client) => {
 });
 
 // App pool — points to your default/public schema (or any other)
-export const db = new Pool({
+export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });

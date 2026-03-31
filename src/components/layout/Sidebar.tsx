@@ -139,6 +139,8 @@ export default function Sidebar({ apps, currentApp, onAppChange, user }: Sidebar
                 ?.filter((r) => r.app === currentApp.key || r.app === "*") // ← add || r.app === "*"
                 .map((r) => r.role_code) ?? [];
 
+            const moduleBase = mod.modulePath ? mod.modulePath : currentApp.basePath;
+
             // Filter hidden pages
             const visiblePages = group.pages.filter(
               (p) =>
@@ -169,7 +171,7 @@ export default function Sidebar({ apps, currentApp, onAppChange, user }: Sidebar
                 {!isCollapsed && (
                   <div>
                     {visiblePages.map((page) => {
-                      const fullPath = `${currentApp.basePath}${group.groupPath}${page.pagePath}`;
+                      const fullPath = `${moduleBase}${group.groupPath}${page.pagePath}`;
                       const isActive = pathname === fullPath || pathname.startsWith(`${fullPath}/`);
                       const Icon = iconMap[page.icon] ?? FileText;
 

@@ -11,7 +11,7 @@ function getPageConfig(pathname: string) {
     for (const mod of app.modules) {
       for (const group of mod.pageGroups) {
         for (const page of group.pages) {
-          const fullPath = `${app.basePath}${group.groupPath}${page.pagePath}`;
+          const fullPath = `${mod.modulePath || app.basePath}${group.groupPath}${page.pagePath}`;
           if (pathname === fullPath || pathname.startsWith(`${fullPath}/`)) {
             return page;
           }

@@ -27,9 +27,15 @@ export default function AppShell({ apps, user, children }: AppShellProps) {
 
   // Find the active page title by matching pathname to pageGroups
   const activePage = currentApp.modules
-    .flatMap((m) => m.pageGroups)
-    .flatMap((g) => g.pages)
-    .find((p) => pathname.includes(p.pagePath));
+    .flatMap((m) =>
+      m.pageGroups.flatMap((g) =>
+        g.pages.map((p) => ({
+          page: p,
+          path: `${m.modulePath || currentApp.basePath}${g.groupPath}${p.pagePath}`,
+        })),
+      ),
+    )
+    .find((item) => pathname === item.path || pathname.startsWith(`${item.path}/`))?.page;
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
