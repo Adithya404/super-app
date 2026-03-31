@@ -1,4 +1,5 @@
 import type { AppConfig } from ".";
+import { adminModules } from "./adminModules";
 
 export const tpApp: AppConfig = {
   key: "tp",
@@ -43,7 +44,7 @@ export const tpApp: AppConfig = {
               title: "Activity Templates",
               pagePath: "/activity-templates",
               icon: "ClipboardList",
-              roles: ["tour_admin"],
+              roles: ["supervisor", "tour_admin"],
               hidden: false,
             },
             {
@@ -165,5 +166,6 @@ export const tpApp: AppConfig = {
         },
       ],
     },
+    ...adminModules,
   ],
 };

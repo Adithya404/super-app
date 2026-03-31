@@ -7,6 +7,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { authPool } from "@/lib/db";
+import { getUserRoles } from "./lib/roles";
 
 const maxAge = 30 * 24 * 60 * 60; // 30 days
 
@@ -72,6 +73,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     async session({ session, user }) {
       session.user.id = user.id;
+      const roles = await getUserRoles(session.user.email);
+      session.user.roles = roles;
       return session;
     },
   },

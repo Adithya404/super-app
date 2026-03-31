@@ -59,6 +59,7 @@ type SidebarProps = {
     name?: string | null;
     email?: string | null;
     image?: string | null;
+    roles?: { role_code: string; app: string }[];
   };
 };
 
@@ -128,21 +129,30 @@ export default function Sidebar({ apps, currentApp, onAppChange, user }: Sidebar
       </div>
 
       {/* Nav */}
-      <nav className="scrollbar-thin scrollbar-thumb-white/10 flex-1 overflow-y-auto py-2">
+      <nav className="scrollbar-thin scrollbar-thumb-white/10 no-scrollbar flex-1 overflow-y-auto py-2">
         {currentApp.modules.flatMap((mod) =>
           mod.pageGroups.map((group) => {
             const groupKey = `${currentApp.key}-${group.groupPath}`;
             const isCollapsed = collapsedGroups[groupKey] ?? !group.isExpanded;
+            const userRoleCodes =
+              user.roles
+                ?.filter((r) => r.app === currentApp.key || r.app === "*") // ← add || r.app === "*"
+                .map((r) => r.role_code) ?? [];
 
             // Filter hidden pages
-            const visiblePages = group.pages.filter((p) => !p.hidden);
+            const visiblePages = group.pages.filter(
+              (p) =>
+                !p.hidden &&
+                (p.roles.length === 0 || // no restriction = everyone sees it
+                  p.roles.some((r) => userRoleCodes.includes(r))),
+            );
 
             return (
               <div key={groupKey}>
                 {/* Group header */}
                 <Button
                   onClick={() => toggleGroup(groupKey)}
-                  className="flex w-full items-center justify-between px-3.5 pt-3 pb-1"
+                  className="flex w-full items-center justify-between bg-accent-background px-3.5 pt-3 pb-1"
                 >
                   <span className="font-semibold text-[10px] text-white/30 uppercase tracking-widest">
                     {group.title}

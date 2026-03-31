@@ -1,13 +1,12 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import AppShell from "@/components/layout/AppShell";
-import { tpApp } from "@/components/layout/apps/tp";
-
-const apps = [tpApp]; // add more apps here as you build them
+import { apps } from "@/components/layout/apps/registry";
 
 export default async function SecureLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   if (!session) redirect("/auth");
+  // console.log("session.user in layout:", session.user);
 
   return (
     <AppShell apps={apps} user={session.user}>
