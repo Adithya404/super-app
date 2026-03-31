@@ -1,11 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import { useTheme } from "next-themes";
+// import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 
 function BrandLogo() {
-  const { resolvedTheme } = useTheme();
+  // const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
@@ -14,7 +14,8 @@ function BrandLogo() {
 
   return (
     <Image
-      src={resolvedTheme === "dark" ? "/Brand-dark.svg" : "/Brand-light.svg"}
+      src={"/Brand-new.svg"}
+      // src={resolvedTheme === "dark" ? "/Brand-dark.svg" : "/Brand-light.svg"}
       alt="Super Portal"
       width={500}
       height={48}
@@ -27,7 +28,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       {/* Left Branding */}
-      <div className="hidden items-center justify-center bg-muted p-10 lg:flex">
+      <div className="hidden items-center justify-center border-r-2 bg-black p-10 lg:flex">
         <div className="max-w-md space-y-6 text-center">
           <BrandLogo />
           {/* <h1 className="font-bold text-4xl">Super Portal</h1> */}
