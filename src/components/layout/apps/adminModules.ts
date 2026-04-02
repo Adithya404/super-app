@@ -33,6 +33,13 @@ export const adminModules: AppModule[] = [
             roles: ["admin"],
             hidden: false,
           },
+          {
+            title: "User Sessions",
+            pagePath: "/user-sessions",
+            icon: "UserCog",
+            roles: ["admin"],
+            hidden: false,
+          },
         ],
       },
       {

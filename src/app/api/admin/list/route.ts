@@ -9,7 +9,7 @@ export async function GET() {
     return NextResponse.json({ success: false, message: "Unauthorized Access" }, { status: 401 });
   }
   try {
-    const data = await pool.query("SELECT * FROM super.roles");
+    const data = await pool.query("SELECT * FROM super.users");
     return NextResponse.json({ success: true, data: data.rows }, { status: 201 });
   } catch (err) {
     console.error("error:", err);
