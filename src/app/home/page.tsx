@@ -77,7 +77,7 @@
 import {
   ArrowRight,
   BookOpen,
-  Download,
+  Compass,
   Instagram,
   Linkedin,
   Menu,
@@ -214,7 +214,7 @@ export default function Home() {
                 className="liquid-glass-strong flex cursor-pointer items-center gap-3 rounded-full py-3 pr-6 pl-3 no-underline transition-transform hover:scale-105 active:scale-95"
               >
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/15">
-                  <Download size={13} className="text-white" />
+                  <Compass size={13} className="text-white" />
                 </span>
                 <span className="font-medium text-sm text-white">Access Portal</span>
               </a>

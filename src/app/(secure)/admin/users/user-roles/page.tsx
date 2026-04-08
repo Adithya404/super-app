@@ -6,7 +6,7 @@ import { columns } from "./columns";
 
 export default function DemoPage() {
   const { data, isPending, error } = useQuery({
-    queryKey: ["roles"],
+    queryKey: ["user-roles"],
     queryFn: () => fetch("/api/admin/user-roles").then((r) => r.json()),
   });
   if (isPending) return <span>Loading...</span>;

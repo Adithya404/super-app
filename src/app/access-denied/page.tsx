@@ -1,9 +1,12 @@
-// src/app/access-denied/page.tsx
+"use client";
 
 import { ShieldX } from "lucide-react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
+import { Button } from "@/components/ui/button";
 
 export default function AccessDeniedPage() {
+  const router = useRouter();
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background text-foreground">
       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-destructive/10">
@@ -16,18 +19,20 @@ export default function AccessDeniedPage() {
       </div>
 
       <div className="flex gap-3">
-        <Link
-          href="/tp/config/break-policies"
-          className="rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground text-sm transition-opacity hover:opacity-90"
+        <Button
+          onClick={() => {
+            router.push("/tp/config/break-policies");
+          }}
         >
           Go to Dashboard
-        </Link>
-        <Link
-          href="/auth"
-          className="rounded-md border border-border px-4 py-2 font-medium text-foreground text-sm transition-colors hover:bg-muted"
+        </Button>
+        <Button
+          onClick={() => {
+            signOut({ callbackUrl: "/auth" });
+          }}
         >
           Sign in with different account
-        </Link>
+        </Button>
       </div>
     </div>
   );

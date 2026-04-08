@@ -15,9 +15,10 @@ type AppShellProps = {
     roles?: { role_code: string; app: string }[];
   };
   children: React.ReactNode;
+  hideSidebar?: boolean; // ← add this
 };
 
-export default function AppShell({ apps, user, children }: AppShellProps) {
+export default function AppShell({ apps, user, children, hideSidebar }: AppShellProps) {
   const pathname = usePathname();
 
   // Detect the active app from the current pathname
@@ -39,7 +40,10 @@ export default function AppShell({ apps, user, children }: AppShellProps) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <Sidebar apps={apps} currentApp={currentApp} onAppChange={setCurrentApp} user={user} />
+      {!hideSidebar && (
+        <Sidebar apps={apps} currentApp={currentApp} onAppChange={setCurrentApp} user={user} />
+      )}
+
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <Topbar appName={currentApp.name} pageName={activePage?.title ?? "Dashboard"} />
         <main className="flex-1 overflow-y-auto bg-muted/30 p-6">{children}</main>

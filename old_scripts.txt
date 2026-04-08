@@ -1,0 +1,2 @@
+// "dev": "next dev",
+// "start": "pnpm migrate && next start",

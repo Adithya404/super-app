@@ -1,6 +1,7 @@
 import { Inter } from "next/font/google";
 import "./globals.css";
 import ThemeProvider from "@/components/layout/ThemeProvider";
+import { Toaster } from "@/components/ui/notifications";
 import Providers from "./providers";
 
 const inter = Inter({
@@ -13,7 +14,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={inter.variable}>
       <body>
         <ThemeProvider>
-          <Providers>{children}</Providers>
+          <Providers>
+            {children}
+            <Toaster />
+          </Providers>
         </ThemeProvider>
       </body>
     </html>

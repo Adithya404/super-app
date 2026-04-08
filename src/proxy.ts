@@ -76,7 +76,7 @@ export const config = {
     "/auth/:path*",
     "/access-denied",
     "/tp/:path*",
-    "/ir/:path*",
+    "/pp/:path*",
     "/am/:path*",
     "/hr/:path*",
     "/dashboard/:path*",

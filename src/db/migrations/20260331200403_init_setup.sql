@@ -110,17 +110,7 @@ CREATE TABLE IF NOT EXISTS super.user_roles (
     end_date DATE,
     created_at TIMESTAMPTZ DEFAULT now(),
 
-    PRIMARY KEY (email, role_code),
-
-    CONSTRAINT user_roles_email_fkey
-        FOREIGN KEY (email)
-        REFERENCES super.users (email)
-        ON DELETE CASCADE,
-
-    CONSTRAINT user_roles_role_code_fkey
-        FOREIGN KEY (role_code)
-        REFERENCES super.roles (role_code)
-        ON DELETE CASCADE
+    PRIMARY KEY (email, role_code)
 );
 
 CREATE INDEX IF NOT EXISTS idx_super_user_roles_email

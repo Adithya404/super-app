@@ -1,10 +1,7 @@
+import { ppApp } from "./pp";
 import { tpApp } from "./tp";
-// import { irApp } from "./ir"   ← just uncomment as you add apps
 
-export const apps = [
-  tpApp,
-  // irApp,
-];
+export const apps = [tpApp, ppApp];
 
 // Auto-generate the base paths for proxy matcher — no manual updates needed
 export const appBasePaths = Array.from(
