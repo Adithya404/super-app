@@ -1,15 +1,11 @@
 // lib/roles.ts
 import { authPool } from "@/lib/db";
 
-export type UserRole = {
-  role: string;
-  role_code: string;
-  app: string;
-};
+export type UserRole = string;
 
 export async function getUserRoles(email: string): Promise<UserRole[]> {
   const { rows } = await authPool.query(
-    `SELECT r.role, r.role_code, r.app
+    `SELECT r.role_code
      FROM "super".user_roles ur
      JOIN "super".roles r ON r.role_code = ur.role_code
      WHERE ur.email = $1
@@ -19,7 +15,8 @@ export async function getUserRoles(email: string): Promise<UserRole[]> {
        AND r.start_date  <= CURRENT_DATE`,
     [email],
   );
-  return rows;
+  const roles = rows.map((role) => role.role_code);
+  return roles;
 }
 
 export async function getUserRolesForApp(email: string, app: string): Promise<string[]> {

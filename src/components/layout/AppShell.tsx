@@ -12,7 +12,7 @@ type AppShellProps = {
     name?: string | null;
     email?: string | null;
     image?: string | null;
-    roles?: { role_code: string; app: string }[];
+    roles?: string[];
   };
   children: React.ReactNode;
   hideSidebar?: boolean; // ← add this

@@ -59,7 +59,7 @@ type SidebarProps = {
     name?: string | null;
     email?: string | null;
     image?: string | null;
-    roles?: { role_code: string; app: string }[];
+    roles?: string[];
   };
 };
 
@@ -134,10 +134,7 @@ export default function Sidebar({ apps, currentApp, onAppChange, user }: Sidebar
           mod.pageGroups.map((group) => {
             const groupKey = `${currentApp.key}-${group.groupPath}`;
             const isCollapsed = collapsedGroups[groupKey] ?? !group.isExpanded;
-            const userRoleCodes =
-              user.roles
-                ?.filter((r) => r.app === currentApp.key || r.app === "*") // ← add || r.app === "*"
-                .map((r) => r.role_code) ?? [];
+            const userRoleCodes = user.roles ?? [];
 
             const moduleBase = mod.modulePath ? mod.modulePath : currentApp.basePath;
 

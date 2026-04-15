@@ -58,9 +58,9 @@ export async function proxy(request: NextRequest) {
     if (page && page.roles.length > 0) {
       // ✅ reuse getUserRoles instead of raw query
       const userRoles = await getUserRoles(session.user.email as string);
-      const userRoleCodes = userRoles.map((r) => r.role_code);
+      // const userRoleCodes = userRoles.map((r) => r.role_code);
 
-      const hasAccess = page.roles.some((r) => userRoleCodes.includes(r));
+      const hasAccess = page.roles.some((r) => userRoles.includes(r));
 
       if (!hasAccess) {
         return NextResponse.redirect(new URL("/access-denied", request.url));

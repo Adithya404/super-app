@@ -1,7 +1,10 @@
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { authPool } from "@/lib/db";
 
-export async function DELETE({ params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
     const { id } = await params;
     const result = await authPool.query("select * from sessions where id=$1;", [id]);
@@ -10,8 +13,8 @@ export async function DELETE({ params }: { params: Promise<{ id: string }> }) {
     }
     await authPool.query("delete from sessions where id=$1", [id]);
     return NextResponse.json(
-      { success: false, message: `Session terminated`, sessionId: id },
-      { status: 404 },
+      { success: true, message: `Session terminated`, sessionId: id },
+      { status: 200 },
     );
   } catch (err) {
     console.error("error:", err);
