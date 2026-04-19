@@ -46,7 +46,7 @@ export default function AppShell({ apps, user, children, hideSidebar }: AppShell
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <Topbar appName={currentApp.name} pageName={activePage?.title ?? "Dashboard"} />
-        <main className="flex-1 overflow-y-auto bg-muted/30 p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>
   );
