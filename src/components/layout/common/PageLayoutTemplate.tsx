@@ -1,22 +1,60 @@
 "use client";
+
 import type { ColumnDef } from "@tanstack/react-table";
+import { PlusIcon } from "lucide-react";
+import React, { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import type { Store } from "@/lib/common/store/types";
 import { useRows } from "@/lib/common/store/use-rows";
 
-interface PageLayoutTemplateProps<TData, TValue> {
+// Note: TData should extend object for Store<TData>
+interface PageLayoutTemplateProps<TData extends object, TValue> {
   columns: ColumnDef<TData, TValue>[];
-  store: { data: TData[] };
+  store: Store<TData>;
   title: string;
   description: string;
+  editForm?: React.ReactNode;
 }
 
-export function PageLayoutTemplate<TData, TValue>({
+export function PageLayoutTemplate<TData extends object, TValue>({
   columns,
   store,
   title,
   description,
+  editForm,
 }: PageLayoutTemplateProps<TData, TValue>) {
   const data = useRows(store);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  const handleAddNew = () => {
+    if (store?.createNew) {
+      store.createNew();
+    }
+    setIsDialogOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (store?.save) {
+      const success = await store.save();
+      if (success !== false) {
+        setIsDialogOpen(false);
+      }
+    } else {
+      setIsDialogOpen(false);
+    }
+  };
+
+  const editFormWithStore = React.isValidElement(editForm)
+    ? React.cloneElement(editForm as React.ReactElement<{ store: Store<TData> }>, { store })
+    : editForm;
 
   return (
     <div
@@ -47,11 +85,20 @@ export function PageLayoutTemplate<TData, TValue>({
             <p className="text-muted-foreground/80 text-sm leading-snug">{description}</p>
           </div>
 
-          {/* Decorative row-count pill — populated by DataTable internally,
-              but we can show a static badge for now */}
-          <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-muted/50 px-3 py-1 font-medium text-muted-foreground text-xs backdrop-blur-sm">
-            <span className="h-1.5 w-1.5 rounded-full bg-primary/70" aria-hidden />
-            {data.length} {data.length === 1 ? "row" : "rows"}
+          <div className="flex items-center gap-3">
+            {/* Decorative row-count pill */}
+            <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-muted/50 px-3 py-1 font-medium text-muted-foreground text-xs backdrop-blur-sm">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary/70" aria-hidden />
+              {data.length} {data.length === 1 ? "row" : "rows"}
+            </div>
+
+            {/* Add New Button */}
+            {editForm && (
+              <Button onClick={handleAddNew} size="sm" className="gap-1.5">
+                <PlusIcon className="h-4 w-4" />
+                Add New
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -60,6 +107,24 @@ export function PageLayoutTemplate<TData, TValue>({
       <main className="min-h-0 flex-1 overflow-hidden bg-background">
         <DataTable columns={columns} data={data} />
       </main>
+
+      {/* Edit Form Dialog */}
+      {editForm && (
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogContent className="sm:max-w-md md:max-w-xl">
+            <DialogHeader>
+              <DialogTitle>Add New {title}</DialogTitle>
+            </DialogHeader>
+            <div className="max-h-[70vh] overflow-y-auto px-1 py-4">{editFormWithStore}</div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSave}>Save</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

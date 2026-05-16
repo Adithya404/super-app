@@ -98,3 +98,95 @@ export async function GET(
     return NextResponse.json({ message }, { status: 500 });
   }
 }
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ datasourceId: string }> },
+) {
+  try {
+    const { datasourceId } = await params;
+    const session = await auth();
+
+    if (!session) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
+    const ds = getDataSource(datasourceId);
+    if (!ds) {
+      return NextResponse.json(
+        { message: `DataSource ${datasourceId} not found` },
+        { status: 404 },
+      );
+    }
+
+    // Check permissions
+    const userRoles = session.user.roles || [];
+    const hasAccess = ds.access.some(
+      (acc) => userRoles.includes(acc.roleCode) && acc.type === "Full",
+    );
+
+    if (!hasAccess) {
+      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const rows = body.rows || [];
+
+    if (!Array.isArray(rows)) {
+      return NextResponse.json({ message: "Invalid request format" }, { status: 400 });
+    }
+
+    const results = [];
+    const schemaPrefix = ds.schema ? `"${ds.schema}".` : "";
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      for (const row of rows) {
+        if (row._status === "I") {
+          const columnsToInsert: string[] = [];
+          const valuesToInsert: unknown[] = [];
+          const placeholders: string[] = [];
+          let paramIndex = 1;
+
+          ds.attributes.forEach((attr) => {
+            if ("isCalculated" in attr && attr.isCalculated) return;
+            if (row[attr.code] !== undefined) {
+              columnsToInsert.push(`"${attr.column}"`);
+              valuesToInsert.push(row[attr.code]);
+              placeholders.push(`$${paramIndex++}`);
+            }
+          });
+
+          if (columnsToInsert.length > 0) {
+            const insertSql = `INSERT INTO ${schemaPrefix}"${ds.tableName}" (${columnsToInsert.join(
+              ", ",
+            )}) VALUES (${placeholders.join(", ")}) RETURNING *`;
+            const res = await client.query(insertSql, valuesToInsert);
+            const insertedRow = res.rows[0];
+
+            const mappedRow: Record<string, unknown> = { _cid: row._cid };
+            ds.attributes.forEach((attr) => {
+              if ("isCalculated" in attr && attr.isCalculated) return;
+              mappedRow[attr.code] = insertedRow[attr.column];
+            });
+            results.push(mappedRow);
+          }
+        }
+        // Additional status handlers (e.g., "U", "D") can be added here
+      }
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
+
+    return NextResponse.json(results);
+  } catch (error: unknown) {
+    console.error("DataStore API POST Error:", error);
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    return NextResponse.json({ message }, { status: 500 });
+  }
+}

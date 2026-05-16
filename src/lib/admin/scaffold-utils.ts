@@ -87,7 +87,6 @@ export function generateDataSource(
   tableName: string,
   schema: string,
   columns: ColumnInfo[],
-  module: string,
 ): string {
   const attributes = columns
     .map((c) => {

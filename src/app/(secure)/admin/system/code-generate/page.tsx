@@ -5,6 +5,23 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/ui/combobox";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   generateDataSource,
   generateHook,
@@ -59,10 +76,10 @@ export default function CodeGeneratePage() {
     enabled: !!selectedTable,
   });
 
-  // Reset submodule when module changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: <false positive>
   useEffect(() => {
     setSelectedSubModule(null);
-  }, []);
+  }, [selectedModule]);
 
   const handleGenerate = async () => {
     if (!selectedTable || !columnsData) return;
@@ -88,7 +105,7 @@ export default function CodeGeneratePage() {
         },
         {
           path: `src/lib/common/ds/definitions/${moduleValue}/${className}DS.ts`,
-          content: generateDataSource(className, tableName, schema, columns, moduleValue),
+          content: generateDataSource(className, tableName, schema, columns),
         },
         {
           path: `${baseAppPath}/page.tsx`,
@@ -133,111 +150,112 @@ export default function CodeGeneratePage() {
 
       <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2">
         <div className="flex flex-col gap-2">
-          <label htmlFor="target-module" className="font-medium text-sm">
-            Target Module
-          </label>
-          <select
-            id="target-module"
-            className="rounded border bg-background p-2"
+          <Label htmlFor="target-module">Target Module</Label>
+          <Select
             value={selectedModule.value}
-            onChange={(e) =>
-              setSelectedModule(MODULES.find((m) => m.value === e.target.value) || MODULES[0])
+            onValueChange={(val) =>
+              setSelectedModule(MODULES.find((m) => m.value === val) || MODULES[0])
             }
           >
-            {MODULES.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id="target-module" className="w-full">
+              <SelectValue placeholder="Select module" />
+            </SelectTrigger>
+            <SelectContent>
+              {MODULES.map((m) => (
+                <SelectItem key={m.value} value={m.value}>
+                  {m.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex flex-col gap-2">
-          <label htmlFor="sub-module" className="font-medium text-sm">
-            Sub-Module (Optional)
-          </label>
-          <select
-            id="sub-module"
-            className="rounded border bg-background p-2"
-            value={selectedSubModule?.value || ""}
-            onChange={(e) =>
-              setSelectedSubModule(
-                currentSubModules.find((m) => m.value === e.target.value) || null,
-              )
+          <Label htmlFor="sub-module">Sub-Module (Optional)</Label>
+          <Select
+            value={selectedSubModule?.value || "none"}
+            onValueChange={(val) =>
+              setSelectedSubModule(currentSubModules.find((m) => m.value === val) || null)
             }
           >
-            <option value="">None</option>
-            {currentSubModules.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id="sub-module" className="w-full">
+              <SelectValue placeholder="Select sub-module" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None</SelectItem>
+              {currentSubModules.map((m) => (
+                <SelectItem key={m.value} value={m.value}>
+                  {m.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex flex-col gap-2">
-          <label htmlFor="database-table" className="font-medium text-sm">
-            Database Table
-          </label>
-          <select
-            id="database-table"
-            className="rounded border bg-background p-2"
+          <Label htmlFor="database-table">Database Table</Label>
+          <Combobox
             value={selectedTable ? `${selectedTable.schema}.${selectedTable.name}` : ""}
-            onChange={(e) => {
-              if (!e.target.value) {
+            onValueChange={(val) => {
+              if (!val) {
                 setSelectedTable(null);
                 return;
               }
-              const [schema, name] = e.target.value.split(".");
+              const [schema, name] = val.split(".");
               setSelectedTable({ schema, name });
             }}
           >
-            <option value="">Select a table...</option>
-            {tablesData?.data?.map((t: TableInfo) => (
-              <option
-                key={`${t.table_schema}.${t.table_name}`}
-                value={`${t.table_schema}.${t.table_name}`}
-              >
-                {t.table_schema}.{t.table_name}
-              </option>
-            ))}
-          </select>
+            <ComboboxInput placeholder="Search table..." id="database-table" className="w-full" />
+            <ComboboxContent>
+              <ComboboxEmpty>No table found.</ComboboxEmpty>
+              <ComboboxList>
+                {tablesData?.data?.map((t: TableInfo) => (
+                  <ComboboxItem
+                    key={`${t.table_schema}.${t.table_name}`}
+                    value={`${t.table_schema}.${t.table_name}`}
+                  >
+                    {t.table_schema}.{t.table_name}
+                  </ComboboxItem>
+                ))}
+              </ComboboxList>
+            </ComboboxContent>
+          </Combobox>
         </div>
       </div>
 
       {selectedTable && columnsData && (
-        <div className="mb-8 rounded-lg border bg-slate-50 p-6 dark:bg-slate-900">
-          <h2 className="mb-4 font-semibold text-lg">
-            Preview: {toPascalCase(selectedTable.name)}
-          </h2>
-          <div className="space-y-2 text-sm">
-            <p>
-              <strong>Schema:</strong> {selectedTable.schema}
-            </p>
-            <p>
-              <strong>Table:</strong> {selectedTable.name}
-            </p>
-            <p>
-              <strong>Columns:</strong> {columnsData.data.length}
-            </p>
-            <p>
-              <strong>Target Path:</strong> src/app/(secure)/{selectedModule.value}
-              {selectedSubModule ? `/${selectedSubModule.value}` : ""}/
-              {toKebabCase(selectedTable.name)}
-            </p>
-          </div>
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>Preview: {toPascalCase(selectedTable.name)}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <span className="font-semibold">Schema:</span>
+              <span>{selectedTable.schema}</span>
+              <span className="font-semibold">Table:</span>
+              <span>{selectedTable.name}</span>
+              <span className="font-semibold">Columns:</span>
+              <span>{columnsData.data.length}</span>
+              <span className="font-semibold">Target Path:</span>
+              <span className="break-all">
+                src/app/(secure)/{selectedModule.value}
+                {selectedSubModule ? `/${selectedSubModule.value}` : ""}/
+                {toKebabCase(selectedTable.name)}
+              </span>
+            </div>
 
-          <Button
-            onClick={handleGenerate}
-            disabled={isGenerating}
-            className="mt-6 w-full rounded-md bg-primary py-2 font-bold text-primary-foreground transition-all hover:opacity-90 disabled:opacity-50"
-          >
-            {isGenerating ? "Generating..." : "Generate & Write to Codebase"}
-          </Button>
-        </div>
+            <Button onClick={handleGenerate} disabled={isGenerating} className="w-full font-bold">
+              {isGenerating ? "Generating..." : "Generate & Write to Codebase"}
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
-      {isLoadingTables && <p className="text-center text-muted-foreground">Loading tables...</p>}
+      {isLoadingTables && (
+        <div className="flex justify-center p-4">
+          <p className="animate-pulse text-muted-foreground">Loading tables...</p>
+        </div>
+      )}
     </div>
   );
 }
