@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 
 export default function AccessDeniedPage() {
   const router = useRouter();
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background text-foreground">
       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-destructive/10">
@@ -21,12 +22,14 @@ export default function AccessDeniedPage() {
       <div className="flex gap-3">
         <Button
           onClick={() => {
-            router.push("/tp/config/break-policies");
+            // Root redirects to the user's first accessible page dynamically
+            router.push("/");
           }}
         >
           Go to Dashboard
         </Button>
         <Button
+          variant="outline"
           onClick={() => {
             signOut({ callbackUrl: "/auth" });
           }}

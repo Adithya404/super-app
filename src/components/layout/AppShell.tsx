@@ -1,13 +1,13 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState } from "react";
-import type { AppConfig } from "./apps";
+import type { Team } from "@/lib/sidebar/types";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
+import { TeamProvider, useTeamContext } from "./team-context";
 
 type AppShellProps = {
-  apps: AppConfig[];
+  teams: Team[];
   user: {
     name?: string | null;
     email?: string | null;
@@ -15,39 +15,62 @@ type AppShellProps = {
     roles?: string[];
   };
   children: React.ReactNode;
-  hideSidebar?: boolean; // ← add this
+  hideSidebar?: boolean;
 };
 
-export default function AppShell({ apps, user, children, hideSidebar }: AppShellProps) {
+// We split this into an inner component so we can use the useTeamContext hook
+function AppShellInner({ user, children, hideSidebar }: Omit<AppShellProps, "teams">) {
   const pathname = usePathname();
+  const { activeTeam } = useTeamContext();
 
-  // Detect the active app from the current pathname
-  const activeApp = apps.find((app) => pathname.startsWith(app.basePath)) ?? apps[0];
+  // Find the active page title
+  let activePageName = "Dashboard";
+  if (activeTeam) {
+    // Check oneLevelNav
+    const navMatch = activeTeam.oneLevelNav.find(
+      (p) =>
+        pathname === `${activeTeam.teamPath}${p.pagePath}` ||
+        pathname.startsWith(`${activeTeam.teamPath}${p.pagePath}/`),
+    );
+    if (navMatch) {
+      activePageName = navMatch.title;
+    } else {
+      // Check modules
+      const moduleMatch = activeTeam.modules
+        .flatMap((m) =>
+          m.pageGroups.flatMap((g) =>
+            g.pages.map((p) => ({
+              title: p.title,
+              path: `${m.modulePath}${g.groupPath}${p.pagePath}`,
+            })),
+          ),
+        )
+        .find((item) => pathname === item.path || pathname.startsWith(`${item.path}/`));
 
-  const [currentApp, setCurrentApp] = useState<AppConfig>(activeApp);
-
-  // Find the active page title by matching pathname to pageGroups
-  const activePage = currentApp.modules
-    .flatMap((m) =>
-      m.pageGroups.flatMap((g) =>
-        g.pages.map((p) => ({
-          page: p,
-          path: `${m.modulePath || currentApp.basePath}${g.groupPath}${p.pagePath}`,
-        })),
-      ),
-    )
-    .find((item) => pathname === item.path || pathname.startsWith(`${item.path}/`))?.page;
+      if (moduleMatch) {
+        activePageName = moduleMatch.title;
+      }
+    }
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      {!hideSidebar && (
-        <Sidebar apps={apps} currentApp={currentApp} onAppChange={setCurrentApp} user={user} />
-      )}
+      {!hideSidebar && <Sidebar user={user} />}
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <Topbar appName={currentApp.name} pageName={activePage?.title ?? "Dashboard"} />
+        <Topbar appName={activeTeam?.name ?? "Super Portal"} pageName={activePageName} />
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>
+  );
+}
+
+export default function AppShell(props: AppShellProps) {
+  return (
+    <TeamProvider teams={props.teams}>
+      <AppShellInner user={props.user} hideSidebar={props.hideSidebar}>
+        {props.children}
+      </AppShellInner>
+    </TeamProvider>
   );
 }

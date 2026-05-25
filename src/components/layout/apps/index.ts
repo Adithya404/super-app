@@ -27,4 +27,5 @@ export type AppConfig = {
   color: string;
   basePath: string;
   modules: AppModule[];
+  oneLevelNav?: AppPage[];
 };

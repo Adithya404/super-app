@@ -3,15 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "tsx server.ts",
     "build": "next build",
-    "start": "NODE_ENV=production tsx server.ts",
     "lint": "biome lint .",
     "format": "biome format . --write",
     "check": "biome check .",
     "typecheck": "tsc --noEmit",
     "migrate": "tsx src/db/run-migrations.ts",
-    "migrate:create": "tsx src/db/create-migration.ts"
+    "migrate:create": "tsx src/db/create-migration.ts",
+    "dev": "next dev",
+    "start": "pnpm migrate && next start"
   },
   "lint-staged": {
     "*.{js,ts,tsx}": [

@@ -1,4 +1,3 @@
-// lib/roles.ts
 import { authPool } from "@/lib/db";
 
 export type UserRole = string;

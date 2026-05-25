@@ -1,70 +1,76 @@
-// proxy.ts
-
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { appBasePaths, apps, validAppPaths } from "@/components/layout/apps/registry";
-import { getUserRoles } from "@/lib/roles"; // ← use existing function
+import { checkPageAccess, getRedirectForAppPath } from "@/lib/teams";
 
-function getPageConfig(pathname: string) {
-  for (const app of apps) {
-    for (const mod of app.modules) {
-      for (const group of mod.pageGroups) {
-        for (const page of group.pages) {
-          const fullPath = `${mod.modulePath || app.basePath}${group.groupPath}${page.pagePath}`;
-          if (pathname === fullPath || pathname.startsWith(`${fullPath}/`)) {
-            return page;
-          }
-        }
-      }
-    }
-  }
-  return null;
-}
-
-function isValidAppPath(pathname: string) {
-  return validAppPaths.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-}
-
-function isAppBasePath(pathname: string) {
-  return appBasePaths.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-}
+// Pathname prefixes that don't require authentication
+const UNAUTHENTICATED_PREFIXES = [
+  "/api/auth",
+  "/home",
+  "/_next/static",
+  "/favicon.ico",
+  "/images",
+  "/public",
+];
 
 export async function proxy(request: NextRequest) {
-  const session = await auth();
   const { pathname } = request.nextUrl;
 
-  const isAuthPage = pathname.startsWith("/auth");
-  const isAccessDenied = pathname.startsWith("/access-denied");
+  const isAuthPage = pathname === "/auth" || pathname.startsWith("/auth/");
 
-  if (isAuthPage || isAccessDenied) {
-    if (session && isAuthPage) {
-      return NextResponse.redirect(new URL("/tp/break-policies", request.url));
-    }
+  // 1. Check for unauthenticated routes (fast path)
+  if (
+    UNAUTHENTICATED_PREFIXES.some((prefix) => pathname.startsWith(prefix) || pathname === prefix)
+  ) {
     return NextResponse.next();
   }
 
+  // 2. Get session
+  const session = await auth();
+
+  // If there's a session and user is trying to access /auth, redirect to home/dashboard
+  if (session && isAuthPage) {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+
+  // If there is NO session and user is trying to access /auth, allow it
+  if (!session && isAuthPage) {
+    return NextResponse.next();
+  }
+
+  // 3. Handle unauthenticated requests
   if (!session) {
-    return NextResponse.redirect(new URL("/auth", request.url));
+    if (pathname.startsWith("/api")) {
+      return NextResponse.json({ status: "ERROR", message: "Unauthorized" }, { status: 401 });
+    }
+
+    // Redirect to login with sourceUrl for page requests
+    const newUrl = new URL("/auth", request.nextUrl.origin);
+    const searchParams = request.nextUrl.search;
+    const sourceUrl = `${pathname}${searchParams}`;
+    newUrl.searchParams.set("sourceUrl", sourceUrl);
+    return NextResponse.redirect(newUrl);
   }
 
-  if (isAppBasePath(pathname) && !isValidAppPath(pathname)) {
-    return NextResponse.redirect(new URL("/access-denied", request.url));
+  // 4. Check page access based on user's teams
+  const teams = session.user.teams ?? [];
+
+  if (teams.length === 0 && pathname !== "/no-access" && !pathname.startsWith("/api/auth")) {
+    return NextResponse.redirect(new URL("/no-access", request.url));
   }
 
-  if (isValidAppPath(pathname)) {
-    const page = getPageConfig(pathname);
+  if (!pathname.startsWith("/api")) {
+    // Check if pathname exactly matches a team or module base path
+    const redirectPath = getRedirectForAppPath(teams, pathname);
+    if (redirectPath) {
+      return NextResponse.redirect(new URL(redirectPath, request.nextUrl.origin));
+    }
 
-    if (page && page.roles.length > 0) {
-      // ✅ reuse getUserRoles instead of raw query
-      const userRoles = await getUserRoles(session.user.email as string);
-      // const userRoleCodes = userRoles.map((r) => r.role_code);
-
-      const hasAccess = page.roles.some((r) => userRoles.includes(r));
-
-      if (!hasAccess) {
-        return NextResponse.redirect(new URL("/access-denied", request.url));
-      }
+    const hasAccess = checkPageAccess(teams, pathname);
+    if (!hasAccess) {
+      const newUrl = new URL("/access-denied", request.nextUrl.origin);
+      newUrl.searchParams.set("path", pathname);
+      return NextResponse.redirect(newUrl);
     }
   }
 
@@ -72,13 +78,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    "/auth/:path*",
-    "/access-denied",
-    "/tp/:path*",
-    "/pp/:path*",
-    "/am/:path*",
-    "/hr/:path*",
-    "/dashboard/:path*",
-  ],
+  // Match all routes except standard Next.js static files and internals
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
