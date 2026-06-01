@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Combobox,
   ComboboxContent,
@@ -24,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import {
   generateDataSource,
+  generateEditFormContent,
   generateHook,
   generateInterface,
   generatePageContent,
@@ -51,6 +53,7 @@ const SUB_MODULES: Record<string, { label: string; value: string }[]> = {
     { label: "Users", value: "users" },
     { label: "System", value: "system" },
   ],
+  tp: [{ label: "Config", value: "config" }],
 };
 
 export default function CodeGeneratePage() {
@@ -61,6 +64,7 @@ export default function CodeGeneratePage() {
     value: string;
   } | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generateEditForm, setGenerateEditForm] = useState(false);
 
   const { data: tablesData, isLoading: isLoadingTables } = useQuery({
     queryKey: ["admin", "db", "tables"],
@@ -113,7 +117,7 @@ export default function CodeGeneratePage() {
         },
         {
           path: `${baseAppPath}/page-content.tsx`,
-          content: generatePageContent(className, toPascalCase(tableName)),
+          content: generatePageContent(className, toPascalCase(tableName), generateEditForm),
         },
         {
           path: `${baseAppPath}/hooks/use-store.ts`,
@@ -124,6 +128,13 @@ export default function CodeGeneratePage() {
           content: generateTableColumns(className, moduleValue, columns),
         },
       ];
+
+      if (generateEditForm) {
+        files.push({
+          path: `${baseAppPath}/components/edit-form.tsx`,
+          content: generateEditFormContent(className, moduleValue, columns),
+        });
+      }
 
       const res = await fetch("/api/admin/scaffold", {
         method: "POST",
@@ -220,6 +231,17 @@ export default function CodeGeneratePage() {
               </ComboboxList>
             </ComboboxContent>
           </Combobox>
+        </div>
+
+        <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-muted/20 px-3 py-2 md:mt-6">
+          <Checkbox
+            id="generate-edit-form"
+            checked={generateEditForm}
+            onCheckedChange={(checked) => setGenerateEditForm(!!checked)}
+          />
+          <Label htmlFor="generate-edit-form" className="cursor-pointer font-medium text-sm">
+            Generate Edit Form
+          </Label>
         </div>
       </div>
 

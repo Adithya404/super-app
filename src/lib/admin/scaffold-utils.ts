@@ -152,7 +152,41 @@ ${columns.map((c) => `  { accessorKey: "${toCamelCase(c.column_name)}", header: 
 `;
 }
 
-export function generatePageContent(_className: string, title: string): string {
+export function toLabelText(str: string): string {
+  return str
+    .split(/[_\s-]+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+export function generatePageContent(
+  className: string,
+  title: string,
+  hasEditForm: boolean = false,
+): string {
+  if (hasEditForm) {
+    return `"use client";
+import { PageLayoutTemplate } from "@/components/layout/common/PageLayoutTemplate";
+import ${className}EditForm from "./components/edit-form";
+import { columns } from "./hooks/table-columns";
+import { useStore } from "./hooks/use-store";
+
+export default function PageContent() {
+  const store = useStore();
+
+  return (
+    <PageLayoutTemplate
+      title="${title}"
+      description="Manage ${title} data."
+      columns={columns}
+      store={store}
+      editForm={<${className}EditForm />}
+    />
+  );
+}
+`;
+  }
+
   return `"use client";
 import { PageLayoutTemplate } from "@/components/layout/common/PageLayoutTemplate";
 import { useStore } from "./hooks/use-store";
@@ -168,6 +202,111 @@ export default function PageContent() {
       columns={columns}
       store={store}
     />
+  );
+}
+`;
+}
+
+export function generateEditFormContent(
+  className: string,
+  module: string,
+  columns: ColumnInfo[],
+): string {
+  const hasBoolean = columns.some((c) => mapPgTypeToDataType(c.data_type) === "Boolean");
+
+  const imports = [
+    `import { Input } from "@/components/ui/input";`,
+    `import { Label } from "@/components/ui/label";`,
+    hasBoolean ? `import { Checkbox } from "@/components/ui/checkbox";` : null,
+    `import type { ${className} } from "@/lib/common/ds/types/${module}/${className}";`,
+    `import type { Store } from "@/lib/common/store/types";`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const fields = columns
+    .map((c) => {
+      const camelName = toCamelCase(c.column_name);
+      const labelText = toLabelText(c.column_name);
+      const isRequired = c.is_nullable === "NO";
+      const isPrimary = c.is_primary;
+      const dataType = mapPgTypeToDataType(c.data_type);
+
+      const labelTag = `<Label htmlFor="${camelName}"${isRequired ? " className=\"after:ml-0.5 after:text-red-500 after:content-['*']\"" : ""}>${labelText}</Label>`;
+
+      if (dataType === "Boolean") {
+        return `      <div className="flex items-center gap-2 py-2">
+        <Checkbox
+          id="${camelName}"${isPrimary ? "\n          disabled={fromDB}" : ""}
+          checked={!!row.${camelName}}
+          onCheckedChange={(checked) => handleChange("${camelName}", !!checked)}
+        />
+        ${labelTag}
+      </div>`;
+      }
+
+      if (dataType === "Number") {
+        return `      <div className="grid gap-2">
+        ${labelTag}
+        <Input
+          id="${camelName}"
+          type="number"${isPrimary ? "\n          disabled={fromDB}" : ""}
+          value={row.${camelName} ?? ""}
+          onChange={(e) => {
+            const val = e.target.value;
+            handleChange("${camelName}", val === "" ? null : Number(val));
+          }}
+        />
+      </div>`;
+      }
+
+      if (dataType === "Date" || dataType === "DateTime") {
+        return `      <div className="grid gap-2">
+        ${labelTag}
+        <Input
+          id="${camelName}"
+          type="date"${isPrimary ? "\n          disabled={fromDB}" : ""}
+          value={row.${camelName} ? new Date(row.${camelName}).toISOString().split("T")[0] : ""}
+          onChange={(e) => handleChange("${camelName}", e.target.value)}
+        />
+      </div>`;
+      }
+
+      // Default to Text
+      return `      <div className="grid gap-2">
+        ${labelTag}
+        <Input
+          id="${camelName}"${isPrimary ? "\n          disabled={fromDB}" : ""}
+          value={row.${camelName} || ""}
+          onChange={(e) => handleChange("${camelName}", e.target.value)}
+        />
+      </div>`;
+    })
+    .join("\n\n");
+
+  return `"use client";
+
+${imports}
+
+export default function ${className}EditForm({ store }: { store?: Store<${className}> }) {
+  const row = store?.currentRow;
+
+  if (!row || !store) {
+    return null;
+  }
+
+  const fromDB = row._status !== "I";
+
+  const handleChange = (field: string, value: any) => {
+    if (row._cid) {
+      store.updateRow(row._cid, { [field]: value });
+    }
+  };
+
+  return (
+    <div className="grid gap-4 py-2">
+${fields}
+    </div>
   );
 }
 `;

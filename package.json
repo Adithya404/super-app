@@ -10,8 +10,8 @@
     "typecheck": "tsc --noEmit",
     "migrate": "tsx src/db/run-migrations.ts",
     "migrate:create": "tsx src/db/create-migration.ts",
-    "dev": "next dev",
-    "start": "pnpm migrate && next start"
+    "dev": "tsx server.ts",
+    "start": "NODE_ENV=production tsx server.ts"
   },
   "lint-staged": {
     "*.{js,ts,tsx}": [
