@@ -47,7 +47,6 @@ export default function GroupsPage() {
 
   const sendRef = useRef<(msg: any) => void>(() => {});
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: <later>
   const handleWSMessage = useCallback(
     (msg: any) => {
       switch (msg.type) {
