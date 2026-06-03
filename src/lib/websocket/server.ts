@@ -49,7 +49,9 @@ export function initWebSocketServer(wss: WebSocketServer) {
 
     // Mark user online in DB
     pingpalPool.query(
-      `UPDATE pingpal.users SET is_online = true, last_seen = NOW() WHERE id = $1`,
+      `INSERT INTO pingpal.user_presence (user_id, is_online, last_seen)
+       VALUES ($1, true, NOW())
+       ON CONFLICT (user_id) DO UPDATE SET is_online = true, last_seen = NOW()`,
       [userId],
     );
 
@@ -81,7 +83,9 @@ export function initWebSocketServer(wss: WebSocketServer) {
         roomClients.get(roomId)?.delete(userId);
       });
       pingpalPool.query(
-        `UPDATE pingpal.users SET is_online = false, last_seen = NOW() WHERE id = $1`,
+        `INSERT INTO pingpal.user_presence (user_id, is_online, last_seen)
+         VALUES ($1, false, NOW())
+         ON CONFLICT (user_id) DO UPDATE SET is_online = false, last_seen = NOW()`,
         [userId],
       );
     });

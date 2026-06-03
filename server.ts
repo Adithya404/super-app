@@ -1,15 +1,21 @@
 // server.ts (root of project)
+import { loadEnvConfig } from "@next/env";
+
+loadEnvConfig(process.cwd());
+
 import { createServer } from "node:http";
 import { parse } from "node:url";
 import next from "next";
 import { WebSocketServer } from "ws";
-import { initWebSocketServer } from "@/lib/websocket/server";
 
 const dev = process.env.NODE_ENV !== "production";
 const app = next({ dev });
 const handle = app.getRequestHandler();
 
-app.prepare().then(() => {
+app.prepare().then(async () => {
+  // Dynamically import initWebSocketServer after environment variables have been loaded
+  const { initWebSocketServer } = await import("@/lib/websocket/server");
+
   const server = createServer((req, res) => {
     const parsedUrl = parse(req.url ?? "", true);
     handle(req, res, parsedUrl);

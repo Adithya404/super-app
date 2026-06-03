@@ -6,7 +6,7 @@
 import { Plus, Users } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ChatWindow from "@/components/pingpal/ChatWindow";
 import CreateGroupDialog from "@/components/pingpal/CreateGroupDialog";
 import EmptyState from "@/components/pingpal/EmptyState";
@@ -45,6 +45,8 @@ export default function GroupsPage() {
     fetchMessages(roomId);
   }, [roomId, fetchMessages]);
 
+  const sendRef = useRef<(msg: any) => void>(() => {});
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: <later>
   const handleWSMessage = useCallback(
     (msg: any) => {
@@ -52,7 +54,7 @@ export default function GroupsPage() {
         case "new_message": {
           if (msg.message.room_id !== roomId) return;
           setMessages((prev) => [...prev, msg.message]);
-          if (roomId) send({ type: "mark_read", roomId });
+          if (roomId) sendRef.current({ type: "mark_read", roomId });
           break;
         }
 
@@ -92,6 +94,7 @@ export default function GroupsPage() {
   );
 
   const { send } = useWebSocket(session?.user?.id ?? "", handleWSMessage);
+  sendRef.current = send;
 
   const handleSend = useCallback(
     (content: string, replyToId?: string) => {

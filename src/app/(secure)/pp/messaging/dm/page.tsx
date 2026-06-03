@@ -7,7 +7,7 @@
 import { MessageCircle } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ChatWindow from "@/components/pingpal/ChatWindow";
 import EmptyState from "@/components/pingpal/EmptyState";
 import { useWebSocket } from "@/hooks/useWebSocket";
@@ -57,8 +57,9 @@ export default function DMPage() {
     fetchMessages(roomId);
   }, [roomId, fetchMessages]);
 
+  const sendRef = useRef<(msg: any) => void>(() => {});
+
   // Handle incoming WS messages for this room
-  // biome-ignore lint/correctness/useExhaustiveDependencies: <later>
   const handleWSMessage = useCallback(
     (msg: any) => {
       switch (msg.type) {
@@ -67,7 +68,7 @@ export default function DMPage() {
           setMessages((prev) => [...prev, msg.message]);
           // Mark as read since we're viewing this room
           if (roomId) {
-            send({ type: "mark_read", roomId });
+            sendRef.current({ type: "mark_read", roomId });
           }
           break;
         }
@@ -103,6 +104,7 @@ export default function DMPage() {
   );
 
   const { send } = useWebSocket(session?.user?.id ?? "", handleWSMessage);
+  sendRef.current = send;
 
   // Send a message
   const handleSend = useCallback(

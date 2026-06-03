@@ -14,31 +14,56 @@ type Handler = (msg: WSMessage) => void;
 
 export function useWebSocket(userId: string, onMessage: Handler) {
   const wsRef = useRef<WebSocket | null>(null);
+  const onMessageRef = useRef(onMessage);
 
   useEffect(() => {
-    const ws = new WebSocket(
-      `${process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:3000"}/ws?userId=${userId}`,
-    );
-    wsRef.current = ws;
+    onMessageRef.current = onMessage; // always up to date, no reconnect
+  }, [onMessage]);
 
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        onMessage(msg);
-      } catch {}
+  const queueRef = useRef<WSMessage[]>([]);
+
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    let timeoutId: NodeJS.Timeout | null = null;
+
+    function connect() {
+      ws = new WebSocket(
+        `${process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:3000"}/ws?userId=${userId}`,
+      );
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        queueRef.current.forEach((msg) => {
+          ws?.send(JSON.stringify(msg));
+        });
+        queueRef.current = [];
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          onMessageRef.current(msg);
+        } catch {}
+      };
+
+      ws.onclose = () => {
+        timeoutId = setTimeout(connect, 3000);
+      };
+    }
+
+    connect();
+
+    return () => {
+      if (ws) ws.close();
+      if (timeoutId) clearTimeout(timeoutId);
     };
-
-    ws.onclose = () => {
-      // Reconnect after 3s
-      setTimeout(() => wsRef.current?.CLOSED && wsRef.current.close(), 3000);
-    };
-
-    return () => ws.close();
-  }, [userId, onMessage]);
+  }, [userId]);
 
   const send = useCallback((msg: WSMessage) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(msg));
+    } else {
+      queueRef.current.push(msg); // buffer until open
     }
   }, []);
 

@@ -1,25 +1,42 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { pingpalPool } from "@/lib/db";
+import { verifyChatAccess } from "@/lib/pingpal/permissions";
+
+const baseSelect = `
+  SELECT u.id, u.email, u.name, u.image as avatar_url, COALESCE(up.is_online, false) as is_online
+  FROM super.users u
+  JOIN super.user_roles ur ON ur.email = u.email
+  LEFT JOIN pingpal.user_presence up ON up.user_id = u.id
+`;
+
+const baseWhere = `
+  ur.role_code IN ('chat_personnel', 'chat_master')
+  AND (ur.end_date IS NULL OR ur.end_date > CURRENT_DATE)
+`;
 
 export async function GET(req: Request) {
   const session = await auth();
-  if (!session) {
+  if (!session || !session.user?.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { searchParams } = new URL(req.url);
-  const email = searchParams.get("email"); // exact email lookup — used by ChatSidebar new DM
-  const q = searchParams.get("q"); // fuzzy search — used by CreateGroupDialog
-  const ids = searchParams.get("ids"); // comma-separated ids — used by ChatWindow sender names
+  const { hasAccess } = await verifyChatAccess(session.user.email);
+  if (!hasAccess) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
-  // ── Exact email lookup ─────────────────────────────────────────
+  const { searchParams } = new URL(req.url);
+  const email = searchParams.get("email"); // exact email lookup
+  const q = searchParams.get("q"); // fuzzy search
+  const ids = searchParams.get("ids"); // comma-separated ids
+
   if (email) {
     const { rows } = await pingpalPool.query(
-      `SELECT id, email, name, avatar_url, is_online
-       FROM pingpal.users
-       WHERE email = $1
-         AND id != $2`,
+      `${baseSelect}
+       WHERE ${baseWhere}
+         AND u.email = $1
+         AND u.id != $2`,
       [email, session.user.id],
     );
 
@@ -30,16 +47,15 @@ export async function GET(req: Request) {
     return NextResponse.json({ user: rows[0] });
   }
 
-  // ── Fuzzy search by name or email ──────────────────────────────
   if (q) {
     const term = `%${q.toLowerCase()}%`;
 
     const { rows } = await pingpalPool.query(
-      `SELECT id, email, name, avatar_url, is_online
-       FROM pingpal.users
-       WHERE (LOWER(email) LIKE $1 OR LOWER(COALESCE(name, '')) LIKE $1)
-         AND id != $2
-       ORDER BY name ASC NULLS LAST
+      `${baseSelect}
+       WHERE ${baseWhere}
+         AND (LOWER(u.email) LIKE $1 OR LOWER(COALESCE(u.name, '')) LIKE $1)
+         AND u.id != $2
+       ORDER BY u.name ASC NULLS LAST
        LIMIT 20`,
       [term, session.user.id],
     );
@@ -47,7 +63,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ users: rows });
   }
 
-  // ── Bulk fetch by ids ──────────────────────────────────────────
   if (ids) {
     const idList = ids
       .split(",")
@@ -58,25 +73,23 @@ export async function GET(req: Request) {
       return NextResponse.json({ users: [] });
     }
 
-    // Build $1, $2, $3 ... placeholders
     const placeholders = idList.map((_, i) => `$${i + 1}`).join(", ");
 
     const { rows } = await pingpalPool.query(
-      `SELECT id, email, name, avatar_url, is_online
-       FROM pingpal.users
-       WHERE id IN (${placeholders})`,
+      `${baseSelect}
+       WHERE ${baseWhere}
+         AND u.id IN (${placeholders})`,
       idList,
     );
 
     return NextResponse.json({ users: rows });
   }
 
-  // ── No params — return all users except self (for admin/debug) ─
   const { rows } = await pingpalPool.query(
-    `SELECT id, email, name, avatar_url, is_online
-     FROM pingpal.users
-     WHERE id != $1
-     ORDER BY name ASC NULLS LAST
+    `${baseSelect}
+     WHERE ${baseWhere}
+       AND u.id != $1
+     ORDER BY u.name ASC NULLS LAST
      LIMIT 50`,
     [session.user.id],
   );

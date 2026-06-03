@@ -22,14 +22,14 @@ export const ppApp: AppConfig = {
               title: "Direct Messages",
               pagePath: "/dm",
               icon: "MessageCircle",
-              roles: [], // all authenticated users
+              roles: ["chat_personnel"], // all authenticated users
               hidden: false,
             },
             {
               title: "Group Chats",
               pagePath: "/groups",
               icon: "Users",
-              roles: [],
+              roles: ["chat_personnel"],
               hidden: false,
             },
           ],

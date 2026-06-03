@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     }
 
     // Check if user exists
-    const { rows: userRows } = await authPool.query("SELECT id FROM users WHERE email = $1", [
+    const { rows: userRows } = await authPool.query("SELECT id FROM super.users WHERE email = $1", [
       email,
     ]);
 
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
 
       // Check how they signed up — look for linked OAuth accounts
       const { rows: accountRows } = await authPool.query(
-        'SELECT provider FROM accounts WHERE "userId" = $1',
+        'SELECT provider FROM super.accounts WHERE "userId" = $1',
         [userId],
       );
 
@@ -59,7 +59,10 @@ export async function POST(req: Request) {
     }
 
     const hashed = await bcrypt.hash(password, 12);
-    await authPool.query("INSERT INTO users (email, password) VALUES ($1, $2)", [email, hashed]);
+    await authPool.query("INSERT INTO super.users (email, password) VALUES ($1, $2)", [
+      email,
+      hashed,
+    ]);
 
     return NextResponse.json({ success: true }, { status: 201 });
   } catch (err) {

@@ -81,7 +81,7 @@ export default function ChatSidebar({
         onRoomsChange();
         setShowNewDM(false);
         setDmEmail("");
-        router.push(`/pingpal/messaging/dm?roomId=${data.room.id}`);
+        router.push(`/pp/messaging/dm?roomId=${data.room.id}`);
       }
     } catch {
       setDmError("Something went wrong");
