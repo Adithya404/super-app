@@ -37,7 +37,7 @@ export default function RoomHeader({ room, currentUserId, isGroup }: RoomHeaderP
   const dmPartner = !isGroup ? members.find((m) => m.user_id !== currentUserId) : null;
 
   const displayName = isGroup
-    ? room.name
+    ? room.display_name
     : (dmPartner?.name ?? dmPartner?.email ?? "Direct Message");
   const subtitle = isGroup
     ? `${members.length} members · ${onlineCount} online`

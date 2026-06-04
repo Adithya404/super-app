@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronsUpDown, Loader2, MessageCircle, Plus, Search, Users } from "lucide-react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Room, WSMessage } from "@/app/(secure)/pp/layout";
@@ -42,7 +43,7 @@ export default function ChatSidebar({
     const matchesTab = r.type === tab;
     const matchesSearch =
       !search ||
-      r.name?.toLowerCase().includes(search.toLowerCase()) ||
+      r.display_name?.toLowerCase().includes(search.toLowerCase()) ||
       r.last_message?.content?.toLowerCase().includes(search.toLowerCase());
     return matchesTab && matchesSearch;
   });
@@ -284,13 +285,22 @@ export default function ChatSidebar({
             >
               {/* Avatar */}
               <div className="relative shrink-0">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 font-medium text-primary text-sm">
-                  {room.type === "group" ? (
+                <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-primary/10 font-medium text-primary text-sm">
+                  {room.avatar_url ? (
+                    <Image
+                      src={room.avatar_url}
+                      alt={room.display_name ?? "User"}
+                      width={40}
+                      height={40}
+                      className="h-full w-full rounded-full object-cover"
+                    />
+                  ) : room.type === "group" ? (
                     <Users size={16} />
                   ) : (
-                    (room.name ?? "?").charAt(0).toUpperCase()
+                    (room.display_name ?? "?").charAt(0).toUpperCase()
                   )}
                 </div>
+
                 {/* Unread badge */}
                 {room.unread_count > 0 && (
                   <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 font-semibold text-[10px] text-primary-foreground">
@@ -309,7 +319,7 @@ export default function ChatSidebar({
                         : "font-medium text-foreground"
                     }`}
                   >
-                    {room.name ?? "Direct Message"}
+                    {room.display_name ?? "Direct Message"}
                   </p>
                   {room.last_message && (
                     <span className="shrink-0 text-[10px] text-muted-foreground">

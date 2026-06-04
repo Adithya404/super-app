@@ -10,7 +10,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 
 export type Room = {
   id: string;
-  name: string | null;
+  display_name: string;
   type: "dm" | "group";
   avatar_url: string | null;
   role: "owner" | "admin" | "member";
