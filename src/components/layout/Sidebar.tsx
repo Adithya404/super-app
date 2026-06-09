@@ -187,7 +187,7 @@ export default function Sidebar({ user }: SidebarProps) {
         {/* Hierarchical Navigation (Modules -> Groups -> Pages) */}
         {activeTeam.modules.flatMap((mod) =>
           mod.pageGroups.map((group) => {
-            const groupKey = `${activeTeam.name}-${group.groupPath}`;
+            const groupKey = `${mod.modulePath}-${group.groupPath}-${group.title}`;
             const isCollapsed = collapsedGroups[groupKey] ?? !group.isExpanded;
 
             return (

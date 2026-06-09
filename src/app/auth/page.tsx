@@ -1,6 +1,7 @@
 "use client";
 
 import { Eye, EyeOff } from "lucide-react";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { useState } from "react";
@@ -43,48 +44,45 @@ export default function AuthPage() {
       return;
     }
 
-    router.push("/(secure)/tp/"); // ✅ only runs on true success
+    router.push("/(secure)/tp/");
   }
 
-  async function handleRegister(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setErrorMessage(null);
+  // ── REGISTER HANDLER (commented out — may be re-enabled later) ──────────────
+  // async function handleRegister(e: React.FormEvent) {
+  //   e.preventDefault();
+  //   setLoading(true);
+  //   setErrorMessage(null);
+  //
+  //   const res = await fetch("/api/register", {
+  //     method: "POST",
+  //     headers: { "Content-Type": "application/json" },
+  //     body: JSON.stringify({ email, password }),
+  //   });
+  //
+  //   const data = await res.json();
+  //   setLoading(false);
+  //
+  //   if (!res.ok) {
+  //     if (data.hint === "USE_GOOGLE") {
+  //       setErrorMessage("You already have an account. Continue with Google");
+  //       return;
+  //     }
+  //     if (data.hint === "USE_LOGIN") {
+  //       setErrorMessage("You already have an account. Please log in.");
+  //       return;
+  //     }
+  //     setErrorMessage(data.error || "Unable to create account");
+  //     return;
+  //   }
+  //
+  //   await signIn("credentials", {
+  //     email,
+  //     password,
+  //     callbackUrl: "/dashboard",
+  //   });
+  // }
+  // ────────────────────────────────────────────────────────────────────────────
 
-    const res = await fetch("/api/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-
-    const data = await res.json();
-    setLoading(false);
-
-    if (!res.ok) {
-      if (data.hint === "USE_GOOGLE") {
-        // Automatically trigger Google sign in for them
-        setErrorMessage("You already have an account. Continue with Google");
-        // await signIn("google", { callbackUrl: "/dashboard" });
-        return;
-      }
-
-      if (data.hint === "USE_LOGIN") {
-        // Switch them to the login tab
-        setErrorMessage("You already have an account. Please log in.");
-        //setActiveTab("login"); // see note below
-        return;
-      }
-
-      setErrorMessage(data.error || "Unable to create account");
-      return;
-    }
-
-    await signIn("credentials", {
-      email,
-      password,
-      callbackUrl: "/dashboard",
-    });
-  }
   return (
     <div className="w-full max-w-md">
       {oauthErrorMessage && (
@@ -99,15 +97,14 @@ export default function AuthPage() {
         </Alert>
       )}
 
-      <Tabs defaultValue="login">
+      <Tabs defaultValue="credentials">
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="login">Login</TabsTrigger>
-          <TabsTrigger value="register">Register</TabsTrigger>
+          <TabsTrigger value="credentials">Sign In</TabsTrigger>
+          <TabsTrigger value="sso">SSO</TabsTrigger>
         </TabsList>
 
-        {/* LOGIN TAB */}
-
-        <TabsContent value="login">
+        {/* ── MANUAL CREDENTIAL SIGN-IN TAB ─────────────────────────────────── */}
+        <TabsContent value="credentials">
           <form onSubmit={handleLogin} className="mt-4 space-y-4">
             <div className="space-y-2">
               <Label>Email</Label>
@@ -121,14 +118,12 @@ export default function AuthPage() {
 
             <div className="space-y-2">
               <Label>Password</Label>
-
               <div className="relative">
                 <Input
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
-
                 <button
                   type="button"
                   className="absolute top-2.5 right-3 text-muted-foreground"
@@ -142,27 +137,65 @@ export default function AuthPage() {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Signing in..." : "Login"}
             </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              onClick={() => signIn("google", { callbackUrl: "/tp" })}
-            >
-              Continue with Google
-            </Button>
           </form>
         </TabsContent>
 
-        {/* REGISTER TAB */}
+        {/* ── SSO TAB ───────────────────────────────────────────────────────── */}
+        <TabsContent value="sso">
+          <div className="mt-4 space-y-4">
+            <p className="text-center text-muted-foreground text-sm">
+              Sign in using single sign-on provider.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="flex w-full items-center justify-center gap-2"
+              onClick={() => signIn("google", { callbackUrl: "/tp" })}
+            >
+              {/* Inline Google "G" SVG — no new dependencies */}
+              {/* <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 48 48"
+                width="18"
+                height="18"
+                aria-hidden="true"
+              >
+                <path
+                  fill="#4285F4"
+                  d="M24 9.5c3.14 0 5.95 1.08 8.17 2.85l6.09-6.09C34.39 3.07 29.5 1 24 1 14.82 1 7.07 6.48 3.88 14.18l7.09 5.51C12.64 13.61 17.87 9.5 24 9.5z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M46.1 24.55c0-1.64-.15-3.22-.42-4.75H24v9h12.42c-.54 2.9-2.18 5.36-4.64 7.01l7.19 5.59C43.18 37.07 46.1 31.27 46.1 24.55z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M10.97 28.31A14.6 14.6 0 0 1 9.5 24c0-1.5.26-2.95.72-4.31L3.13 14.18A23.94 23.94 0 0 0 0 24c0 3.86.92 7.5 2.54 10.72l8.43-6.41z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M24 47c5.5 0 10.12-1.82 13.5-4.95l-7.19-5.59C28.54 38.1 26.38 38.5 24 38.5c-6.13 0-11.36-4.11-13.03-9.69l-8.43 6.41C6.07 42.69 14.49 47 24 47z"
+                />
+              </svg> */}
+              <Image
+                src="https://api.iconify.design/logos:google-icon.svg"
+                width="18"
+                height="18"
+                alt="Google"
+              />
+              Continue with Google
+            </Button>
+          </div>
+        </TabsContent>
 
-        <TabsContent value="register">
+        {/* ── REGISTER TAB (commented out — may be re-enabled later) ────────── */}
+        {/* <TabsTrigger value="register">Register</TabsTrigger> */}
+        {/* <TabsContent value="register">
           <form onSubmit={handleRegister} className="mt-4 space-y-4">
             <div className="space-y-2">
               <Label>Email</Label>
               <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
-
             <div className="space-y-2">
               <Label>Password</Label>
               <Input
@@ -171,12 +204,11 @@ export default function AuthPage() {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
-
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Creating account..." : "Create Account"}
             </Button>
           </form>
-        </TabsContent>
+        </TabsContent> */}
       </Tabs>
     </div>
   );
