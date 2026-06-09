@@ -71,6 +71,39 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
   ],
   callbacks: {
+    async signIn({ user, account, profile }) {
+      // Only gate OAuth/OIDC providers — credentials are already validated in authorize()
+      if (account?.type === "oidc" || account?.provider === "google") {
+        const email = user.email;
+        if (!email) return false;
+
+        // Check if user exists in super.users
+        const { rows } = await authPool.query("SELECT id FROM users WHERE email = $1", [email]);
+
+        if (rows.length === 0) {
+          // User not in super.users — reject sign-in (prevents auto-creation)
+          return "/auth?error=not-registered";
+        }
+
+        // Auto-sync profile data from Google OIDC id_token
+        await authPool.query(
+          `UPDATE users
+           SET
+             name            = COALESCE($1, name),
+             image           = COALESCE($2, image),
+             "emailVerified" = CASE WHEN $3 THEN NOW() ELSE "emailVerified" END
+           WHERE email = $4`,
+          [
+            profile?.name ?? user.name ?? null,
+            profile?.picture ?? user.image ?? null,
+            profile?.email_verified ?? false,
+            email,
+          ],
+        );
+      }
+
+      return true;
+    },
     async session({ session, user }) {
       session.user.id = user.id;
       const roles = await getUserRoles(session.user.email);

@@ -1,7 +1,7 @@
 "use client";
 
 import { Eye, EyeOff } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -10,6 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+const ERROR_MESSAGES: Record<string, string> = {
+  "not-registered": "This Google account is not registered. Contact your administrator for access.",
+};
+
 export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -17,6 +21,9 @@ export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const oauthError = searchParams.get("error");
+  const oauthErrorMessage = oauthError ? (ERROR_MESSAGES[oauthError] ?? null) : null;
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -80,6 +87,12 @@ export default function AuthPage() {
   }
   return (
     <div className="w-full max-w-md">
+      {oauthErrorMessage && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{oauthErrorMessage}</AlertDescription>
+        </Alert>
+      )}
+
       {errorMessage && (
         <Alert variant="destructive" className="mb-4">
           <AlertDescription>{errorMessage}</AlertDescription>
