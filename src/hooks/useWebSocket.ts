@@ -27,9 +27,10 @@ export function useWebSocket(userId: string, onMessage: Handler) {
     let timeoutId: NodeJS.Timeout | null = null;
 
     function connect() {
-      ws = new WebSocket(
-        `${process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:3000"}/ws?userId=${userId}`,
-      );
+      const wsUrl =
+        process.env.NEXT_PUBLIC_WS_URL ??
+        `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`;
+      ws = new WebSocket(`${wsUrl}/ws?userId=${userId}`);
       wsRef.current = ws;
 
       ws.onopen = () => {

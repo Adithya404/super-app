@@ -34,7 +34,7 @@ app.prepare().then(async () => {
     }
   });
 
-  server.listen(3000, () => {
-    console.info("> Ready on http://localhost:3000");
+  server.listen(3000, "0.0.0.0", () => {
+    console.info("> Ready on http://0.0.0.0:3000");
   });
 });

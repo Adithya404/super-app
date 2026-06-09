@@ -38,6 +38,7 @@ export default function AuthPage() {
 
     router.push("/(secure)/tp/"); // ✅ only runs on true success
   }
+
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
