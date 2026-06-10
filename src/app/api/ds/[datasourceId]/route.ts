@@ -1,4 +1,5 @@
 // src/app/api/ds/[datasourceId]/route.ts
+import bcrypt from "bcryptjs";
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getDataSource } from "@/lib/common/ds/registry";
@@ -149,6 +150,15 @@ export async function POST(
           const placeholders: string[] = [];
           let paramIndex = 1;
 
+          if (datasourceId === "Users") {
+            if (row.password) {
+              row.password = await bcrypt.hash(row.password as string, 12);
+            }
+            if (typeof row.email === "string") {
+              row.email = row.email.toLowerCase();
+            }
+          }
+
           ds.attributes.forEach((attr) => {
             if ("isCalculated" in attr && attr.isCalculated) return;
             if (row[attr.code] !== undefined) {
@@ -172,8 +182,43 @@ export async function POST(
             });
             results.push(mappedRow);
           }
+        } else if (row._status === "U") {
+          const setClauses: string[] = [];
+          const whereClauses: string[] = [];
+          const valuesToUpdate: unknown[] = [];
+          let paramIndex = 1;
+
+          ds.attributes.forEach((attr) => {
+            if (attr.primary || ("isCalculated" in attr && attr.isCalculated)) return;
+            if (row[attr.code] !== undefined) {
+              setClauses.push(`"${attr.column}" = $${paramIndex++}`);
+              valuesToUpdate.push(row[attr.code]);
+            }
+          });
+
+          ds.attributes.forEach((attr) => {
+            if (!attr.primary) return;
+            const keyValue =
+              (row._orig as Record<string, unknown> | undefined)?.[attr.code] ?? row[attr.code];
+            whereClauses.push(`"${attr.column}" = $${paramIndex++}`);
+            valuesToUpdate.push(keyValue);
+          });
+
+          if (setClauses.length > 0 && whereClauses.length > 0) {
+            const updateSql = `UPDATE ${schemaPrefix}"${ds.tableName}" SET ${setClauses.join(
+              ", ",
+            )} WHERE ${whereClauses.join(" AND ")} RETURNING *`;
+            const res = await client.query(updateSql, valuesToUpdate);
+            const updatedRow = res.rows[0];
+
+            const mappedRow: Record<string, unknown> = { _cid: row._cid };
+            ds.attributes.forEach((attr) => {
+              if ("isCalculated" in attr && attr.isCalculated) return;
+              mappedRow[attr.code] = updatedRow[attr.column];
+            });
+            results.push(mappedRow);
+          }
         }
-        // Additional status handlers (e.g., "U", "D") can be added here
       }
       await client.query("COMMIT");
     } catch (e) {

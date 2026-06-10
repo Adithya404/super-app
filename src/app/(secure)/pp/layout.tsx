@@ -58,6 +58,12 @@ export default function PingPalLayout({ children }: PingPalLayoutProps) {
     fetchRooms();
   }, [fetchRooms]);
 
+  useEffect(() => {
+    const handler = () => fetchRooms();
+    window.addEventListener("pingpal:rooms-changed", handler);
+    return () => window.removeEventListener("pingpal:rooms-changed", handler);
+  }, [fetchRooms]);
+
   // Handle incoming WebSocket messages at layout level
   // so the room list stays live across all pages
   const handleWSMessage = useCallback(

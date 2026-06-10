@@ -4,7 +4,8 @@ import { pingpalPool } from "@/lib/db";
 import { verifyChatAccess } from "@/lib/pingpal/permissions";
 
 const baseSelect = `
-  SELECT u.id, u.email, u.name, u.image as avatar_url, COALESCE(up.is_online, false) as is_online
+  SELECT DISTINCT ON (u.id)
+    u.id, u.email, u.name, u.image as avatar_url, COALESCE(up.is_online, false) as is_online
   FROM super.users u
   JOIN super.user_roles ur ON ur.email = u.email
   LEFT JOIN pingpal.user_presence up ON up.user_id = u.id
@@ -55,7 +56,7 @@ export async function GET(req: Request) {
        WHERE ${baseWhere}
          AND (LOWER(u.email) LIKE $1 OR LOWER(COALESCE(u.name, '')) LIKE $1)
          AND u.id != $2
-       ORDER BY u.name ASC NULLS LAST
+       ORDER BY u.id, u.name ASC NULLS LAST
        LIMIT 20`,
       [term, session.user.id],
     );
@@ -89,7 +90,7 @@ export async function GET(req: Request) {
     `${baseSelect}
      WHERE ${baseWhere}
        AND u.id != $1
-     ORDER BY u.name ASC NULLS LAST
+     ORDER BY u.id, u.name ASC NULLS LAST
      LIMIT 50`,
     [session.user.id],
   );

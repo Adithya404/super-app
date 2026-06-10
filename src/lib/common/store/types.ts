@@ -43,6 +43,8 @@ export interface Store<T extends object = Record<string, unknown>> {
 
   updateRow(id: string, partialRecord: Partial<T>, skipDirty?: boolean): void;
 
+  beginEdit?(record: Row<T>): string;
+
   save(params?: {
     silent?: boolean;
     feedback?: "NONE" | string;

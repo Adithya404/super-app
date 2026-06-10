@@ -17,7 +17,8 @@ import { useRows } from "@/lib/common/store/use-rows";
 
 // Note: TData should extend object for Store<TData>
 interface PageLayoutTemplateProps<TData extends object, TValue> {
-  columns: ColumnDef<TData, TValue>[];
+  columns?: ColumnDef<TData, TValue>[];
+  getColumns?: (handlers: { onEdit: (row: TData) => void }) => ColumnDef<TData, TValue>[];
   store: Store<TData>;
   title: string;
   description: string;
@@ -25,7 +26,8 @@ interface PageLayoutTemplateProps<TData extends object, TValue> {
 }
 
 export function PageLayoutTemplate<TData extends object, TValue>({
-  columns,
+  columns: staticColumns,
+  getColumns,
   store,
   title,
   description,
@@ -33,11 +35,23 @@ export function PageLayoutTemplate<TData extends object, TValue>({
 }: PageLayoutTemplateProps<TData, TValue>) {
   const data = useRows(store);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<"add" | "edit">("add");
+
+  const handleEdit = (row: TData) => {
+    if (store?.beginEdit) {
+      store.beginEdit(row);
+    }
+    setDialogMode("edit");
+    setIsDialogOpen(true);
+  };
+
+  const resolvedColumns = getColumns?.({ onEdit: handleEdit }) ?? staticColumns ?? [];
 
   const handleAddNew = () => {
     if (store?.createNew) {
       store.createNew();
     }
+    setDialogMode("add");
     setIsDialogOpen(true);
   };
 
@@ -105,7 +119,7 @@ export function PageLayoutTemplate<TData extends object, TValue>({
 
       {/* Table area */}
       <main className="min-h-0 flex-1 overflow-hidden bg-background">
-        <DataTable columns={columns} data={data} />
+        <DataTable columns={resolvedColumns} data={data} />
       </main>
 
       {/* Edit Form Dialog */}
@@ -113,7 +127,9 @@ export function PageLayoutTemplate<TData extends object, TValue>({
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent className="sm:max-w-md md:max-w-xl">
             <DialogHeader>
-              <DialogTitle>Add New {title}</DialogTitle>
+              <DialogTitle>
+                {dialogMode === "add" ? `Add New ${title}` : `Edit ${title}`}
+              </DialogTitle>
             </DialogHeader>
             <div className="max-h-[70vh] overflow-y-auto px-1 py-4">{editFormWithStore}</div>
             <DialogFooter>

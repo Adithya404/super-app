@@ -1,4 +1,4 @@
-import { DefaultAttribute, DefaultDataSource } from "../../defaults";
+import { DefaultAttribute, DefaultCalculatedAttribute, DefaultDataSource } from "../../defaults";
 import type { DataSource } from "../../types";
 
 export const SessionsDS: DataSource = {
@@ -42,6 +42,14 @@ export const SessionsDS: DataSource = {
       column: "expires",
 
       optional: false,
+    },
+    {
+      ...DefaultCalculatedAttribute,
+      code: "useremail",
+      name: "User Email",
+      type: "Text",
+      column: `(SELECT u.email FROM "super".users u WHERE u.id = x."userId")`,
+      isCalculated: true,
     },
   ],
   access: [{ roleCode: "admin", type: "Full" }],

@@ -51,6 +51,14 @@ export function useStore<T extends object = any>(options: StoreOptions): Store<T
     setLocalRows((prev) => prev.map((row) => (row._cid === _cid ? { ...row, ...updates } : row)));
   }, []);
 
+  const beginEdit = useCallback((record: any) => {
+    const _cid = crypto.randomUUID();
+    const { _cid: _omitCid, _status: _omitStatus, _orig: _omitOrig, ...rest } = record;
+    const editRow = { ...rest, _cid, _status: "U", _orig: { ...rest } };
+    setLocalRows([editRow]);
+    return _cid;
+  }, []);
+
   const save = useCallback(async () => {
     const dirtyRecords = localRows.filter((r) => r._status !== "N");
     if (dirtyRecords.length === 0) return true;
@@ -87,9 +95,10 @@ export function useStore<T extends object = any>(options: StoreOptions): Store<T
     error: error instanceof Error ? error.message : error ? String(error) : null,
     datasourceId,
     options,
-    refetch: async (force?: boolean) => refetch(),
+    refetch: async (_force?: boolean) => refetch(),
     createNew,
     updateRow,
+    beginEdit,
     save,
     currentRow,
   };

@@ -57,9 +57,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        const { rows } = await authPool.query("SELECT * FROM users WHERE email = $1", [
-          credentials.email,
-        ]);
+        const { rows } = await authPool.query(
+          "SELECT * FROM users WHERE LOWER(email) = LOWER($1)",
+          [credentials.email],
+        );
         const user = rows[0];
         if (!user?.password) return null;
 
@@ -74,30 +75,66 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async signIn({ user, account, profile }) {
       // Only gate OAuth/OIDC providers — credentials are already validated in authorize()
       if (account?.type === "oidc" || account?.provider === "google") {
-        const email = user.email;
+        const email = user.email?.toLowerCase();
         if (!email) return false;
 
-        // Check if user exists in super.users
-        const { rows } = await authPool.query("SELECT id FROM users WHERE email = $1", [email]);
+        // Pre-registered users must exist in super.users (admin-created accounts)
+        const { rows } = await authPool.query("SELECT id FROM users WHERE LOWER(email) = $1", [
+          email,
+        ]);
 
         if (rows.length === 0) {
-          // User not in super.users — reject sign-in (prevents auto-creation)
           return "/auth?error=not-registered";
         }
 
-        // Auto-sync profile data from Google OIDC id_token
+        const userId = rows[0].id;
+        user.id = userId;
+
+        // Link Google to pre-registered users who were created without an OAuth account row
+        if (account.provider === "google" && account.providerAccountId) {
+          await authPool.query(
+            `INSERT INTO accounts (
+               "userId", type, provider, "providerAccountId",
+               access_token, refresh_token, expires_at, token_type, scope, id_token, session_state
+             )
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             ON CONFLICT (provider, "providerAccountId") DO UPDATE SET
+               "userId" = EXCLUDED."userId",
+               access_token = EXCLUDED.access_token,
+               refresh_token = EXCLUDED.refresh_token,
+               expires_at = EXCLUDED.expires_at,
+               token_type = EXCLUDED.token_type,
+               scope = EXCLUDED.scope,
+               id_token = EXCLUDED.id_token,
+               session_state = EXCLUDED.session_state`,
+            [
+              userId,
+              account.type,
+              account.provider,
+              account.providerAccountId,
+              account.access_token ?? null,
+              account.refresh_token ?? null,
+              account.expires_at ?? null,
+              account.token_type ?? null,
+              account.scope ?? null,
+              account.id_token ?? null,
+              account.session_state ?? null,
+            ],
+          );
+        }
+
         await authPool.query(
           `UPDATE users
            SET
              name            = COALESCE($1, name),
              image           = COALESCE($2, image),
              "emailVerified" = CASE WHEN $3 THEN NOW() ELSE "emailVerified" END
-           WHERE email = $4`,
+           WHERE id = $4`,
           [
             profile?.name ?? user.name ?? null,
             profile?.picture ?? user.image ?? null,
             profile?.email_verified ?? false,
-            email,
+            userId,
           ],
         );
       }

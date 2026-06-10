@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { pingpalPool } from "@/lib/db";
 import { verifyChatAccess } from "@/lib/pingpal/permissions";
+import { assertChatEligibleUser } from "@/lib/pingpal/users";
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -36,6 +37,18 @@ export async function POST(req: Request) {
   const client = await pingpalPool.connect();
   try {
     await client.query("BEGIN");
+
+    const [creatorEligible, targetEligible] = await Promise.all([
+      assertChatEligibleUser(session.user.id, client),
+      assertChatEligibleUser(targetUserId, client),
+    ]);
+    if (!creatorEligible || !targetEligible) {
+      await client.query("ROLLBACK");
+      return NextResponse.json(
+        { error: "One or both users are not eligible for PingPal chat" },
+        { status: 400 },
+      );
+    }
 
     const {
       rows: [room],

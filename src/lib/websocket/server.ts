@@ -4,6 +4,7 @@
 import type { IncomingMessage } from "node:http";
 import { WebSocket, type WebSocketServer } from "ws";
 import { pingpalPool } from "@/lib/db";
+import { MESSAGE_SELECT } from "@/lib/pingpal/message-query";
 
 export type WSClient = {
   ws: WebSocket;
@@ -105,12 +106,18 @@ async function handleMessage(userId: string, msg: any) {
       );
       if (!membership.length) return;
 
-      // Insert message
-      const { rows } = await pingpalPool.query(
+      const { rows: inserted } = await pingpalPool.query(
         `INSERT INTO pingpal.messages (room_id, sender_id, content, reply_to_id)
          VALUES ($1, $2, $3, $4)
-         RETURNING *`,
+         RETURNING id`,
         [roomId, userId, content, replyToId ?? null],
+      );
+      const messageId = inserted[0].id;
+
+      const { rows } = await pingpalPool.query(
+        `${MESSAGE_SELECT}
+         WHERE m.id = $1`,
+        [messageId],
       );
       const message = rows[0];
 
@@ -143,13 +150,28 @@ async function handleMessage(userId: string, msg: any) {
 
     case "react": {
       const { messageId, emoji, roomId } = msg;
-      await pingpalPool.query(
-        `INSERT INTO pingpal.reactions (message_id, user_id, emoji)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (message_id, user_id, emoji) DO NOTHING`,
+
+      const { rows: existing } = await pingpalPool.query(
+        `SELECT 1 FROM pingpal.reactions
+         WHERE message_id = $1 AND user_id = $2 AND emoji = $3`,
         [messageId, userId, emoji],
       );
-      broadcastToRoom(roomId, { type: "reaction", messageId, userId, emoji });
+
+      if (existing.length) {
+        await pingpalPool.query(
+          `DELETE FROM pingpal.reactions
+           WHERE message_id = $1 AND user_id = $2 AND emoji = $3`,
+          [messageId, userId, emoji],
+        );
+        broadcastToRoom(roomId, { type: "reaction", messageId, userId, emoji, removed: true });
+      } else {
+        await pingpalPool.query(
+          `INSERT INTO pingpal.reactions (message_id, user_id, emoji)
+           VALUES ($1, $2, $3)`,
+          [messageId, userId, emoji],
+        );
+        broadcastToRoom(roomId, { type: "reaction", messageId, userId, emoji, removed: false });
+      }
       break;
     }
 

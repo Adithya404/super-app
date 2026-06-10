@@ -4,16 +4,18 @@
 "use client";
 
 import { Plus, Users } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ChatWindow from "@/components/pingpal/ChatWindow";
 import CreateGroupDialog from "@/components/pingpal/CreateGroupDialog";
 import EmptyState from "@/components/pingpal/EmptyState";
 import { useWebSocket } from "@/hooks/useWebSocket";
-import type { Message } from "../dm/page";
+import { applyReactionUpdate } from "@/lib/pingpal/messages";
+import type { Message } from "@/lib/pingpal/types";
 
 export default function GroupsPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const roomId = searchParams.get("roomId");
   const { data: session } = useSession();
@@ -24,7 +26,6 @@ export default function GroupsPage() {
   const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
 
-  // Fetch message history when room changes
   const fetchMessages = useCallback(async (rid: string) => {
     setLoadingMessages(true);
     try {
@@ -64,6 +65,7 @@ export default function GroupsPage() {
         }
 
         case "message_deleted": {
+          if (msg.roomId && msg.roomId !== roomId) return;
           setMessages((prev) =>
             prev.map((m) => (m.id === msg.messageId ? { ...m, is_deleted: true, content: "" } : m)),
           );
@@ -77,19 +79,17 @@ export default function GroupsPage() {
         }
 
         case "reaction": {
-          if (roomId) fetchMessages(roomId);
+          if (!roomId) return;
+          setMessages((prev) => applyReactionUpdate(prev, msg));
           break;
         }
 
         case "member_added":
-        case "member_removed": {
-          // Could refresh room info here if needed
+        case "member_removed":
           break;
-        }
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [roomId, session?.user?.id, fetchMessages],
+    [roomId, session?.user?.id],
   );
 
   const { send } = useWebSocket(session?.user?.id ?? "", handleWSMessage);
@@ -123,20 +123,31 @@ export default function GroupsPage() {
 
   const handleEdit = useCallback(
     async (messageId: string, content: string) => {
-      await fetch(`/api/pingpal/rooms/${roomId}/messages/${messageId}`, {
+      if (!roomId) return;
+      const res = await fetch(`/api/pingpal/rooms/${roomId}/messages/${messageId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content }),
       });
+      if (res.ok) {
+        const data = await res.json();
+        setMessages((prev) => prev.map((m) => (m.id === messageId ? data.message : m)));
+      }
     },
     [roomId],
   );
 
   const handleDelete = useCallback(
     async (messageId: string) => {
-      await fetch(`/api/pingpal/rooms/${roomId}/messages/${messageId}`, {
+      if (!roomId) return;
+      const res = await fetch(`/api/pingpal/rooms/${roomId}/messages/${messageId}`, {
         method: "DELETE",
       });
+      if (res.ok) {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === messageId ? { ...m, is_deleted: true, content: "" } : m)),
+        );
+      }
     },
     [roomId],
   );
@@ -176,14 +187,14 @@ export default function GroupsPage() {
         />
       )}
 
-      {/* Create Group Dialog */}
       <CreateGroupDialog
         open={showCreateGroup}
         onClose={() => setShowCreateGroup(false)}
         onCreated={(room) => {
           setShowCreateGroup(false);
-          // Navigate to the new group
-          window.location.href = `/pingpal/messaging/groups?roomId=${room.id}`;
+          send({ type: "join_room", roomId: room.id });
+          window.dispatchEvent(new CustomEvent("pingpal:rooms-changed"));
+          router.push(`/pp/messaging/groups?roomId=${room.id}`);
         }}
       />
     </>

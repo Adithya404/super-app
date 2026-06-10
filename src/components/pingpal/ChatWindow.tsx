@@ -4,7 +4,7 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { Room, WSMessage } from "@/app/(secure)/pp/layout";
-import type { Message } from "@/app/(secure)/pp/messaging/dm/page";
+import type { Message } from "@/lib/pingpal/types";
 import MessageBubble from "./MessageBubble";
 import MessageInput from "./MessageInput";
 import RoomHeader from "./RoomHeader";
@@ -72,11 +72,18 @@ export default function ChatWindow({
   const [senderNames, setSenderNames] = useState<Record<string, string>>({});
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Fetch room details for the header
   useEffect(() => {
     fetch(`/api/pingpal/rooms/${roomId}`)
       .then((r) => r.json())
-      .then((d) => setRoom(d.room));
+      .then((d) => {
+        const fetched = d.room;
+        if (fetched) {
+          setRoom({
+            ...fetched,
+            display_name: fetched.display_name ?? fetched.name,
+          });
+        }
+      });
   }, [roomId]);
 
   // Build a map of senderId → name from messages
@@ -103,8 +110,8 @@ export default function ChatWindow({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
-  // Mark room as read when opened
   useEffect(() => {
+    send({ type: "join_room", roomId });
     send({ type: "mark_read", roomId });
   }, [roomId, send]);
 
@@ -125,7 +132,14 @@ export default function ChatWindow({
   return (
     <div className="relative flex flex-1 flex-col overflow-hidden">
       {/* Header */}
-      {room && <RoomHeader room={room} currentUserId={currentUserId} isGroup={isGroup} />}
+      {room && (
+        <RoomHeader
+          room={room}
+          currentUserId={currentUserId}
+          isGroup={isGroup}
+          onRoomUpdate={setRoom}
+        />
+      )}
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto py-4">
@@ -158,6 +172,8 @@ export default function ChatWindow({
                 message={msg}
                 isOwn={msg.sender_id === currentUserId}
                 senderName={senderNames[msg.sender_id] ?? "Unknown"}
+                senderNames={senderNames}
+                currentUserId={currentUserId}
                 isGroup={isGroup}
                 onReact={onReact}
                 onEdit={onEdit}

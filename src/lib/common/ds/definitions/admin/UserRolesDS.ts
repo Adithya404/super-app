@@ -31,7 +31,6 @@ export const UserRolesDS: DataSource = {
       name: "StartDate",
       type: "Date",
       column: "start_date",
-
       optional: false,
     },
     {

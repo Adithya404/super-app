@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { pingpalPool } from "@/lib/db";
 import { verifyChatAccess } from "@/lib/pingpal/permissions";
+import { assertChatEligibleUser } from "@/lib/pingpal/users";
 
 // GET — list all rooms for the current user (or all rooms if chat_master)
 export async function GET() {
@@ -144,7 +145,6 @@ export async function POST(req: Request) {
   try {
     await client.query("BEGIN");
 
-    // Create room
     const {
       rows: [room],
     } = await client.query(
@@ -153,18 +153,26 @@ export async function POST(req: Request) {
       [name, description, session.user.id],
     );
 
-    // Add creator as owner
-    const allMembers = [session.user.id, ...(memberIds ?? [])];
+    const allMembers = [...new Set([session.user.id, ...(memberIds ?? [])])];
     for (const userId of allMembers) {
+      const eligible = await assertChatEligibleUser(userId, client);
+      if (!eligible) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          { error: `User ${userId} is not eligible for PingPal chat` },
+          { status: 400 },
+        );
+      }
       await client.query(
         `INSERT INTO pingpal.room_members (room_id, user_id, role)
-         VALUES ($1, $2, $3)`,
+         VALUES ($1, $2, $3)
+         ON CONFLICT (room_id, user_id) DO NOTHING`,
         [room.id, userId, userId === session.user.id ? "owner" : "member"],
       );
     }
 
     await client.query("COMMIT");
-    return NextResponse.json({ room }, { status: 201 });
+    return NextResponse.json({ room: { ...room, display_name: room.name } }, { status: 201 });
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("Error creating group:", err);

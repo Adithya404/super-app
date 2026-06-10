@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { pingpalPool } from "@/lib/db";
+import { MESSAGE_SELECT } from "@/lib/pingpal/message-query";
 import { verifyChatAccess } from "@/lib/pingpal/permissions";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ roomId: string }> }) {
@@ -27,25 +28,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ roomId:
   }
 
   const { rows } = await pingpalPool.query(
-    `SELECT 
-       m.id, 
-       m.room_id, 
-       m.sender_id, 
-       m.content, 
-       m.type, 
-       m.file_url, 
-       m.reply_to_id, 
-       m.is_edited, 
-       m.is_deleted, 
-       m.created_at,
-       json_build_object(
-         'id', u.id,
-         'name', u.name,
-         'email', u.email,
-         'avatar_url', u.image
-       ) AS sender
-     FROM pingpal.messages m
-     LEFT JOIN super.users u ON u.id = m.sender_id
+    `${MESSAGE_SELECT}
      WHERE m.room_id = $1
      ORDER BY m.created_at ASC`,
     [roomId],

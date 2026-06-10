@@ -2,7 +2,7 @@
 
 import { Paperclip, Send, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { Message } from "@/app/(secure)/pp/messaging/dm/page";
+import type { Message } from "@/lib/pingpal/types";
 
 type MessageInputProps = {
   onSend: (content: string, replyToId?: string) => void;
@@ -54,10 +54,12 @@ export default function MessageInput({
     <div className="shrink-0 border-border border-t bg-background px-4 py-3">
       {/* Reply preview */}
       {replyTo && (
-        <div className="mb-2 flex items-center gap-2 rounded-lg bg-muted px-3 py-2">
+        <div className="mb-2 flex items-center gap-2 rounded-lg border-primary/20 border-l-2 bg-muted px-3 py-2">
           <div className="min-w-0 flex-1">
-            <p className="font-medium text-[11px] text-primary">Replying</p>
-            <p className="truncate text-muted-foreground text-xs">{replyTo.content}</p>
+            <p className="font-medium text-[11px] text-primary">Replying to message</p>
+            <p className="truncate text-muted-foreground text-xs">
+              {replyTo.is_deleted ? "Deleted message" : replyTo.content}
+            </p>
           </div>
           <button
             type="button"

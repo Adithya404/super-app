@@ -11,20 +11,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import ChatWindow from "@/components/pingpal/ChatWindow";
 import EmptyState from "@/components/pingpal/EmptyState";
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { applyReactionUpdate } from "@/lib/pingpal/messages";
+import type { Message } from "@/lib/pingpal/types";
 
-export type Message = {
-  id: string;
-  room_id: string;
-  sender_id: string;
-  content: string;
-  type: "text" | "image" | "file" | "system";
-  file_url: string | null;
-  reply_to_id: string | null;
-  is_edited: boolean;
-  is_deleted: boolean;
-  created_at: string;
-  updated_at: string;
-};
+export type { Message };
 
 export default function DMPage() {
   const searchParams = useSearchParams();
@@ -36,7 +26,6 @@ export default function DMPage() {
   const [isTyping, setIsTyping] = useState<Record<string, boolean>>({});
   const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
 
-  // Fetch message history when room changes
   const fetchMessages = useCallback(async (rid: string) => {
     setLoadingMessages(true);
     try {
@@ -59,17 +48,13 @@ export default function DMPage() {
 
   const sendRef = useRef<(msg: any) => void>(() => {});
 
-  // Handle incoming WS messages for this room
   const handleWSMessage = useCallback(
     (msg: any) => {
       switch (msg.type) {
         case "new_message": {
           if (msg.message.room_id !== roomId) return;
           setMessages((prev) => [...prev, msg.message]);
-          // Mark as read since we're viewing this room
-          if (roomId) {
-            sendRef.current({ type: "mark_read", roomId });
-          }
+          if (roomId) sendRef.current({ type: "mark_read", roomId });
           break;
         }
 
@@ -80,6 +65,7 @@ export default function DMPage() {
         }
 
         case "message_deleted": {
+          if (msg.roomId && msg.roomId !== roomId) return;
           setMessages((prev) =>
             prev.map((m) => (m.id === msg.messageId ? { ...m, is_deleted: true, content: "" } : m)),
           );
@@ -93,20 +79,18 @@ export default function DMPage() {
         }
 
         case "reaction": {
-          // Re-fetch messages to get updated reactions
-          // (or optimistically update if you track reactions in state)
-          if (roomId) fetchMessages(roomId);
+          if (!roomId) return;
+          setMessages((prev) => applyReactionUpdate(prev, msg));
           break;
         }
       }
     },
-    [roomId, session?.user?.id, fetchMessages],
+    [roomId, session?.user?.id],
   );
 
   const { send } = useWebSocket(session?.user?.id ?? "", handleWSMessage);
   sendRef.current = send;
 
-  // Send a message
   const handleSend = useCallback(
     (content: string, replyToId?: string) => {
       if (!roomId || !content.trim()) return;
@@ -115,7 +99,6 @@ export default function DMPage() {
     [roomId, send],
   );
 
-  // Send typing indicator with debounce
   const handleTyping = useCallback(() => {
     if (!roomId) return;
     send({ type: "typing", roomId, isTyping: true });
@@ -126,7 +109,6 @@ export default function DMPage() {
     setTypingTimeout(t);
   }, [roomId, send, typingTimeout]);
 
-  // Handle reactions
   const handleReact = useCallback(
     (messageId: string, emoji: string) => {
       if (!roomId) return;
@@ -135,24 +117,33 @@ export default function DMPage() {
     [roomId, send],
   );
 
-  // Handle edit
   const handleEdit = useCallback(
     async (messageId: string, content: string) => {
-      await fetch(`/api/pingpal/rooms/${roomId}/messages/${messageId}`, {
+      if (!roomId) return;
+      const res = await fetch(`/api/pingpal/rooms/${roomId}/messages/${messageId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content }),
       });
+      if (res.ok) {
+        const data = await res.json();
+        setMessages((prev) => prev.map((m) => (m.id === messageId ? data.message : m)));
+      }
     },
     [roomId],
   );
 
-  // Handle delete
   const handleDelete = useCallback(
     async (messageId: string) => {
-      await fetch(`/api/pingpal/rooms/${roomId}/messages/${messageId}`, {
+      if (!roomId) return;
+      const res = await fetch(`/api/pingpal/rooms/${roomId}/messages/${messageId}`, {
         method: "DELETE",
       });
+      if (res.ok) {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === messageId ? { ...m, is_deleted: true, content: "" } : m)),
+        );
+      }
     },
     [roomId],
   );

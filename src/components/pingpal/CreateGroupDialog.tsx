@@ -56,7 +56,8 @@ export default function CreateGroupDialog({ open, onClose, onCreated }: CreateGr
       try {
         const res = await fetch(`/api/pingpal/users?q=${encodeURIComponent(search)}`);
         const data = await res.json();
-        setSearchResults(data.users ?? []);
+        const users: User[] = data.users ?? [];
+        setSearchResults([...new Map(users.map((u) => [u.id, u])).values()]);
       } finally {
         setSearching(false);
       }

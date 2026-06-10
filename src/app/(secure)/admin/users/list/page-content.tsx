@@ -1,6 +1,7 @@
 "use client";
 import { PageLayoutTemplate } from "@/components/layout/common/PageLayoutTemplate";
-import { columns } from "./hooks/table-columns";
+import UsersEditForm from "./components/edit-form";
+import { getColumns } from "./hooks/table-columns";
 import { useStore } from "./hooks/use-store";
 
 export default function PageContent() {
@@ -10,8 +11,9 @@ export default function PageContent() {
     <PageLayoutTemplate
       title="Users"
       description="Manage Users data."
-      columns={columns}
+      getColumns={getColumns}
       store={store}
+      editForm={<UsersEditForm />}
     />
   );
 }
