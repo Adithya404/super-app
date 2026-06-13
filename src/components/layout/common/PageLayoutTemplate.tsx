@@ -2,7 +2,7 @@
 
 import type { ColumnDef } from "@tanstack/react-table";
 import { PlusIcon } from "lucide-react";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import {
@@ -12,6 +12,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { useIsStoreLoading } from "@/lib/common/store/store-hooks";
 import type { Store } from "@/lib/common/store/types";
 import { useRows } from "@/lib/common/store/use-rows";
 
@@ -23,6 +33,66 @@ interface PageLayoutTemplateProps<TData extends object, TValue> {
   title: string;
   description: string;
   editForm?: React.ReactNode;
+  toolbar?: React.ReactNode;
+}
+
+function TableLoadingSkeleton({
+  columnCount,
+  rowCount = 8,
+}: {
+  columnCount: number;
+  rowCount?: number;
+}) {
+  const headerKeys = useMemo(
+    () =>
+      Array.from({ length: columnCount }, (_, index) => `skeleton-header-${columnCount}-${index}`),
+    [columnCount],
+  );
+  const rowKeys = useMemo(
+    () => Array.from({ length: rowCount }, (_, index) => `skeleton-row-${rowCount}-${index}`),
+    [rowCount],
+  );
+  const cellKeysByRow = useMemo(
+    () =>
+      rowKeys.map((rowKey) =>
+        Array.from({ length: columnCount }, (_, index) => `${rowKey}-cell-${columnCount}-${index}`),
+      ),
+    [rowKeys, columnCount],
+  );
+
+  return (
+    <div className="flex h-full w-full flex-col px-2">
+      <div className="min-h-0 flex-1 overflow-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {headerKeys.map((key) => (
+                <TableHead key={key}>
+                  <Skeleton className="h-4 w-24" />
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rowKeys.map((rowKey, rowIndex) => (
+              <TableRow key={rowKey}>
+                {cellKeysByRow[rowIndex]?.map((cellKey, colIndex) => (
+                  <TableCell key={cellKey}>
+                    <Skeleton
+                      className="h-4"
+                      style={{
+                        width: `${Math.min(60 + ((rowIndex + colIndex) % 4) * 20, 100)}%`,
+                      }}
+                    />
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
 }
 
 export function PageLayoutTemplate<TData extends object, TValue>({
@@ -32,8 +102,10 @@ export function PageLayoutTemplate<TData extends object, TValue>({
   title,
   description,
   editForm,
+  toolbar,
 }: PageLayoutTemplateProps<TData, TValue>) {
   const data = useRows(store);
+  const isLoading = useIsStoreLoading(store);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"add" | "edit">("add");
 
@@ -64,6 +136,13 @@ export function PageLayoutTemplate<TData extends object, TValue>({
     } else {
       setIsDialogOpen(false);
     }
+  };
+
+  const handleDialogOpenChange = (open: boolean) => {
+    if (!open) {
+      store.resetStore?.();
+    }
+    setIsDialogOpen(open);
   };
 
   const editFormWithStore = React.isValidElement(editForm)
@@ -100,13 +179,8 @@ export function PageLayoutTemplate<TData extends object, TValue>({
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Decorative row-count pill */}
-            <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-muted/50 px-3 py-1 font-medium text-muted-foreground text-xs backdrop-blur-sm">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary/70" aria-hidden />
-              {data.length} {data.length === 1 ? "row" : "rows"}
-            </div>
+            {toolbar}
 
-            {/* Add New Button */}
             {editForm && (
               <Button onClick={handleAddNew} size="sm" className="gap-1.5">
                 <PlusIcon className="h-4 w-4" />
@@ -119,12 +193,16 @@ export function PageLayoutTemplate<TData extends object, TValue>({
 
       {/* Table area */}
       <main className="min-h-0 flex-1 overflow-hidden bg-background">
-        <DataTable columns={resolvedColumns} data={data} />
+        {isLoading ? (
+          <TableLoadingSkeleton columnCount={Math.max(resolvedColumns.length, 4)} />
+        ) : (
+          <DataTable columns={resolvedColumns} data={data} isLoading={isLoading} />
+        )}
       </main>
 
       {/* Edit Form Dialog */}
       {editForm && (
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
           <DialogContent className="sm:max-w-md md:max-w-xl">
             <DialogHeader>
               <DialogTitle>
@@ -133,7 +211,7 @@ export function PageLayoutTemplate<TData extends object, TValue>({
             </DialogHeader>
             <div className="max-h-[70vh] overflow-y-auto px-1 py-4">{editFormWithStore}</div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              <Button variant="outline" onClick={() => handleDialogOpenChange(false)}>
                 Cancel
               </Button>
               <Button onClick={handleSave}>Save</Button>

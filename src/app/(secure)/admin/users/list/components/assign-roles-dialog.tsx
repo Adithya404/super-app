@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { F, type Filters } from "@/lib/common/ds/filters";
 import type { Roles } from "@/lib/common/ds/types/admin/Roles";
 import type { UserRoles } from "@/lib/common/ds/types/admin/UserRoles";
 import type { Users } from "@/lib/common/ds/types/admin/Users";
@@ -35,12 +36,12 @@ function formatDate(value?: Date | string | null) {
   return new Date(value).toLocaleDateString();
 }
 
-async function fetchDatasource<T>(datasourceId: string, filters?: Record<string, string>) {
+async function fetchDatasource<T extends object>(datasourceId: string, filters: Filters<T> = []) {
   const queryParams = new URLSearchParams({
     limit: "200",
     offset: "0",
     includeCount: "false",
-    filters: JSON.stringify(filters ?? {}),
+    filters: JSON.stringify(filters),
   });
   const response = await fetch(`/api/ds/${datasourceId}?${queryParams.toString()}`);
   if (!response.ok) {
@@ -80,7 +81,7 @@ export function AssignRolesDialog({ user, open, onOpenChange }: AssignRolesDialo
 
   const { data: userRoles = [], isLoading: loadingUserRoles } = useQuery({
     queryKey: ["user-roles", email],
-    queryFn: () => fetchDatasource<UserRoles>("UserRoles", { email }),
+    queryFn: () => fetchDatasource<UserRoles>("UserRoles", [F.text("email", "is", email)]),
     enabled: open && !!email,
   });
 

@@ -1,5 +1,32 @@
 // src/lib/common/ds/types.ts
 
+import type { Filters } from "./filters";
+import type { Sort } from "./query-builder";
+
+export type {
+  BooleanFilterOperator,
+  DateFilterOperator,
+  FilterEntry,
+  Filters,
+  NestedFilter,
+  NumberFilterOperator,
+  SingleFilter,
+  StringFilterOperator,
+} from "./filters";
+export {
+  buildFiltersWhereClause,
+  F,
+  normalizeFilters,
+} from "./filters";
+export type { Query, Sort, SortDirection, SortEntry } from "./query-builder";
+export {
+  buildDataSourceQuery,
+  matchToFilters,
+  mergeQueryFilters,
+  normalizeQuery,
+  parseQueryFromSearchParams,
+} from "./query-builder";
+
 export type DataType = "Text" | "Number" | "Boolean" | "Date" | "DateTime" | "UUID" | "JSON";
 
 export interface Attribute {
@@ -31,7 +58,7 @@ export interface DataSource {
   access: Access[];
 }
 
-export interface StoreOptions {
+export interface StoreOptions<T extends object = Record<string, unknown>> {
   datasourceId: string;
   page?: string;
   alias?: string;
@@ -39,5 +66,11 @@ export interface StoreOptions {
   offset?: number;
   includeCount?: boolean;
   autoQuery?: boolean;
-  filters?: Record<string, unknown>;
+  /** User filters persisted from the last executeQuery call. */
+  filters?: Filters<T>;
+  /** Filters always merged into every query (not persisted as user filters). */
+  defaultFilters?: Filters<T>;
+  /** Simple equality match always merged into every query. */
+  defaultMatch?: Partial<T>;
+  sort?: Sort<T>;
 }

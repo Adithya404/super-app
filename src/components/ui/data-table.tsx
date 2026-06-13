@@ -24,13 +24,34 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "./button";
+import { Skeleton } from "./skeleton";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
+  isLoading?: boolean;
 }
 
-export function DataTable<TData, TValue>({ columns, data }: DataTableProps<TData, TValue>) {
+function RowCountPill({ count, isLoading }: { count: number; isLoading?: boolean }) {
+  return (
+    <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-muted/50 px-3 py-1 font-medium text-muted-foreground text-xs backdrop-blur-sm">
+      <span className="h-1.5 w-1.5 rounded-full bg-primary/70" aria-hidden />
+      {isLoading ? (
+        <Skeleton className="h-3 w-12" />
+      ) : (
+        <>
+          {count} {count === 1 ? "row" : "rows"}
+        </>
+      )}
+    </div>
+  );
+}
+
+export function DataTable<TData, TValue>({
+  columns,
+  data,
+  isLoading = false,
+}: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const table = useReactTable({
@@ -157,8 +178,8 @@ export function DataTable<TData, TValue>({ columns, data }: DataTableProps<TData
       </div>
 
       <div className="flex items-center justify-end space-x-2 border-t bg-card/50 px-4 py-3">
-        <div className="flex-1 text-muted-foreground text-sm">
-          {table.getFilteredRowModel().rows.length} row(s) total.
+        <div className="flex flex-1 items-center">
+          <RowCountPill count={table.getFilteredRowModel().rows.length} isLoading={isLoading} />
         </div>
         <Button
           variant="outline"
