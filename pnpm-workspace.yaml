@@ -1,3 +1,9 @@
+allowBuilds:
+  argon2: true
+  esbuild: true
+  msw: true
+  sharp: true
+  unrs-resolver: true
 onlyBuiltDependencies:
   - argon2
   - esbuild

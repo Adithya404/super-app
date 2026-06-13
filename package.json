@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit",
     "migrate": "tsx src/db/run-migrations.ts",
     "migrate:create": "tsx src/db/create-migration.ts",
+    "seed": "tsx src/db/seed-admin.ts",
+    "db:setup": "pnpm migrate && pnpm seed",
     "dev": "tsx server.ts",
     "start": "NODE_ENV=production tsx server.ts"
   },
