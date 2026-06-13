@@ -1,6 +1,6 @@
 // src/lib/common/ds/query-builder.ts
 
-import { buildFiltersWhereClause, F, type Filters } from "./filters";
+import { buildFiltersWhereClause, F, type Filters, type QueryFiltersInput } from "./filters";
 import type { Attribute, CalculatedAttribute, DataSource } from "./types";
 
 export type SortDirection = "ASC" | "DESC";
@@ -16,9 +16,9 @@ export interface Query<T extends object = Record<string, unknown>> {
   limit?: number;
   offset?: number;
   includeCount?: boolean;
-  filters?: Filters<T>;
+  filters?: QueryFiltersInput<T>;
   /** @deprecated use filters */
-  filter?: Filters<T>;
+  filter?: QueryFiltersInput<T>;
   match?: Partial<T>;
   /** @deprecated use match */
   data?: Partial<T>;
@@ -79,9 +79,9 @@ export function normalizeQuery<T extends object>(query: Query<T>): Query<T> {
 }
 
 export function mergeQueryFilters<T extends object>(
-  defaultFilters: Filters<T> | undefined,
-  userFilters: Filters<T> | undefined,
-): Filters<T> {
+  defaultFilters: QueryFiltersInput<T> | undefined,
+  userFilters: QueryFiltersInput<T> | undefined,
+): QueryFiltersInput<T> {
   return [...(defaultFilters ?? []), ...(userFilters ?? [])];
 }
 

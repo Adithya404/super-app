@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /** biome-ignore-all lint/suspicious/noExplicitAny: store row typing */
 import { proxy } from "valtio";
-import type { Filters } from "../ds/filters";
+import type { QueryFiltersInput } from "../ds/filters";
 import type { Query } from "../ds/query-builder";
 import { mergeQueryFilters, normalizeQuery } from "../ds/query-builder";
 import type { StoreOptions } from "../ds/types";
@@ -131,9 +131,9 @@ export class DataStore<T extends object = any> implements Store<T> {
     this._state.originalRows = {};
   };
 
-  getFilters = (): Filters<T> => this.options.filters ?? [];
+  getFilters = (): QueryFiltersInput<T> => this.options.filters ?? [];
 
-  setFilters = (filters: Filters<T>): void => {
+  setFilters = (filters: QueryFiltersInput<T>): void => {
     this.options.filters = filters;
   };
 
@@ -248,7 +248,7 @@ export class DataStore<T extends object = any> implements Store<T> {
     }
   };
 
-  applyFilters = async (filters?: Filters<T>): Promise<void> => {
+  applyFilters = async (filters?: QueryFiltersInput<T>): Promise<void> => {
     await this.executeQuery({
       query: {
         filters: filters ?? this.getFilters(),

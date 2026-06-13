@@ -1,6 +1,6 @@
 // src/lib/common/store/types.ts
 
-import type { Filters } from "../ds/filters";
+import type { QueryFiltersInput } from "../ds/filters";
 import type { Query } from "../ds/query-builder";
 import type { StoreOptions } from "../ds/types";
 
@@ -76,10 +76,10 @@ export interface Store<T extends object = Record<string, unknown>> {
   dirtyRows?(): Row<T>[];
   hasDirtyRows?(): boolean;
   hasNewRows?(): boolean;
-  getFilters?(): Filters<T>;
-  setFilters?(filters: Filters<T>): void;
+  getFilters?(): QueryFiltersInput<T>;
+  setFilters?(filters: QueryFiltersInput<T>): void;
   clearFilters?(): void;
-  applyFilters?(filters?: Filters<T>): Promise<void>;
+  applyFilters?(filters?: QueryFiltersInput<T>): Promise<void>;
   executeQuery?(options?: ExecuteQueryOptions<T>): Promise<void>;
 
   alias?: string;

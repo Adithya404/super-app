@@ -1,6 +1,6 @@
 // src/lib/common/ds/types.ts
 
-import type { Filters } from "./filters";
+import type { QueryFiltersInput } from "./filters";
 import type { Sort } from "./query-builder";
 
 export type {
@@ -10,6 +10,11 @@ export type {
   Filters,
   NestedFilter,
   NumberFilterOperator,
+  QueryFilterInput,
+  QueryFiltersInput,
+  ShorthandFieldFilter,
+  ShorthandFieldFilterEntry,
+  ShorthandNestedFilterInput,
   SingleFilter,
   StringFilterOperator,
 } from "./filters";
@@ -67,9 +72,9 @@ export interface StoreOptions<T extends object = Record<string, unknown>> {
   includeCount?: boolean;
   autoQuery?: boolean;
   /** User filters persisted from the last executeQuery call. */
-  filters?: Filters<T>;
+  filters?: QueryFiltersInput<T>;
   /** Filters always merged into every query (not persisted as user filters). */
-  defaultFilters?: Filters<T>;
+  defaultFilters?: QueryFiltersInput<T>;
   /** Simple equality match always merged into every query. */
   defaultMatch?: Partial<T>;
   sort?: Sort<T>;

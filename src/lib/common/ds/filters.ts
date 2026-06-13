@@ -52,6 +52,45 @@ export interface NestedFilter<T> {
 export type FilterEntry<T> = SingleFilter<T> | NestedFilter<T>;
 export type Filters<T> = FilterEntry<T>[];
 
+/** Shorthand operator map: `{ email: { contains: "a" } }` or `{ age: { gte: 18 } }` */
+export type ShorthandFieldFilter = {
+  contains?: string;
+  is?: string | boolean;
+  startsWith?: string;
+  endsWith?: string;
+  isNot?: string;
+  eq?: number;
+  neq?: number;
+  gt?: number;
+  lt?: number;
+  gte?: number;
+  lte?: number;
+  after?: string;
+  before?: string;
+  on?: string;
+  onOrAfter?: string;
+  onOrBefore?: string;
+};
+
+/** One field condition, e.g. `{ status: { is: "active" } }` */
+export type ShorthandFieldFilterEntry<T> = {
+  [K in keyof T]?: ShorthandFieldFilter;
+};
+
+/** Nested group, e.g. `{ and: [{ ... }, { ... }] }` */
+export type ShorthandNestedFilterInput<T> = {
+  and?: QueryFilterInput<T>[];
+  or?: QueryFilterInput<T>[];
+};
+
+/** Filter shape accepted by executeQuery / store options */
+export type QueryFilterInput<T> = ShorthandFieldFilterEntry<T> | ShorthandNestedFilterInput<T>;
+export type QueryFiltersInput<T> = QueryFilterInput<T>[];
+
+const STRING_OPERATORS = new Set<string>(["contains", "is", "startsWith", "endsWith", "isNot"]);
+const NUMBER_OPERATORS = new Set<string>(["eq", "neq", "gt", "lt", "gte", "lte"]);
+const DATE_OPERATORS = new Set<string>(["after", "before", "on", "onOrAfter", "onOrBefore"]);
+
 type FilterSqlResult = {
   clause: string;
   values: unknown[];
@@ -109,22 +148,130 @@ export const F = {
   },
 };
 
-/** Accept legacy `{ field: value }` objects or the new filter array format. */
-export function normalizeFilters<T>(filters: unknown): Filters<T> {
-  if (Array.isArray(filters)) {
-    return filters as Filters<T>;
+function isNormalizedFilterEntry<T>(entry: unknown): entry is FilterEntry<T> {
+  return (
+    typeof entry === "object" &&
+    entry !== null &&
+    "kind" in entry &&
+    ((entry as FilterEntry<T>).kind === "single" || (entry as FilterEntry<T>).kind === "nested")
+  );
+}
+
+function isShorthandNestedFilter<T>(entry: unknown): entry is ShorthandNestedFilterInput<T> {
+  return (
+    typeof entry === "object" &&
+    entry !== null &&
+    ("and" in entry || "or" in entry) &&
+    !("kind" in entry)
+  );
+}
+
+function shorthandFieldToSingleFilters<T>(
+  field: string,
+  operators: ShorthandFieldFilter,
+): SingleFilter<T>[] {
+  const key = field as keyof T & string;
+  const results: SingleFilter<T>[] = [];
+
+  for (const [operator, value] of Object.entries(operators)) {
+    if (value === undefined || value === null) {
+      continue;
+    }
+
+    if (operator === "is" && typeof value === "boolean") {
+      results.push(F.boolean<T>(key, value));
+      continue;
+    }
+
+    if (NUMBER_OPERATORS.has(operator) && typeof value === "number") {
+      results.push(F.number<T>(key, operator as NumberFilterOperator, value));
+      continue;
+    }
+
+    if (DATE_OPERATORS.has(operator)) {
+      results.push(F.date<T>(key, operator as DateFilterOperator, String(value)));
+      continue;
+    }
+
+    if (STRING_OPERATORS.has(operator)) {
+      results.push(F.text<T>(key, operator as StringFilterOperator, String(value)));
+    }
   }
 
-  if (filters && typeof filters === "object") {
-    return Object.entries(filters as Record<string, unknown>).map(([field, value]) => {
+  return results;
+}
+
+function normalizeFilterInputEntry<T>(entry: QueryFilterInput<T>): FilterEntry<T>[] {
+  if (isNormalizedFilterEntry<T>(entry)) {
+    return [entry];
+  }
+
+  if (isShorthandNestedFilter<T>(entry)) {
+    const normalized: FilterEntry<T>[] = [];
+
+    if (entry.and?.length) {
+      normalized.push({
+        kind: "nested",
+        logic: "AND",
+        filters: entry.and.flatMap((child) => normalizeFilterInputEntry<T>(child)),
+      });
+    }
+
+    if (entry.or?.length) {
+      normalized.push({
+        kind: "nested",
+        logic: "OR",
+        filters: entry.or.flatMap((child) => normalizeFilterInputEntry<T>(child)),
+      });
+    }
+
+    return normalized;
+  }
+
+  return Object.entries(entry as ShorthandFieldFilterEntry<T>).flatMap(([field, operators]) => {
+    if (!operators || typeof operators !== "object") {
+      return [];
+    }
+    return shorthandFieldToSingleFilters<T>(field, operators);
+  });
+}
+
+/** Normalize shorthand, legacy, or expanded filter input into internal Filters<T>. */
+export function normalizeFilters<T>(filters: unknown): Filters<T> {
+  if (!filters) {
+    return [];
+  }
+
+  if (Array.isArray(filters)) {
+    if (filters.every((entry) => isNormalizedFilterEntry<T>(entry))) {
+      return filters as Filters<T>;
+    }
+
+    return filters.flatMap((entry) => normalizeFilterInputEntry<T>(entry as QueryFilterInput<T>));
+  }
+
+  if (typeof filters === "object") {
+    if (isNormalizedFilterEntry<T>(filters)) {
+      return [filters];
+    }
+
+    if (isShorthandNestedFilter<T>(filters)) {
+      return normalizeFilterInputEntry<T>(filters);
+    }
+
+    return Object.entries(filters as Record<string, unknown>).flatMap(([field, value]) => {
+      if (value && typeof value === "object" && !Array.isArray(value) && !("kind" in value)) {
+        return shorthandFieldToSingleFilters<T>(field, value as ShorthandFieldFilter);
+      }
+
       const key = field as keyof T & string;
       if (typeof value === "number") {
-        return F.number<T>(key, "eq", value);
+        return [F.number<T>(key, "eq", value)];
       }
       if (typeof value === "boolean") {
-        return F.boolean<T>(key, value);
+        return [F.boolean<T>(key, value)];
       }
-      return F.text<T>(key, "is", String(value ?? ""));
+      return [F.text<T>(key, "is", String(value ?? ""))];
     });
   }
 
