@@ -1,15 +1,28 @@
 type TypingIndicatorProps = {
-  userIds: string[]; // list of userIds currently typing
+  userIds: string[];
+  isGroup?: boolean;
+  userNames?: Record<string, string>;
 };
 
-export default function TypingIndicator({ userIds }: TypingIndicatorProps) {
+export default function TypingIndicator({
+  userIds,
+  isGroup,
+  userNames = {},
+}: TypingIndicatorProps) {
   if (userIds.length === 0) return null;
 
-  const label = userIds.length === 1 ? "Someone is typing" : `${userIds.length} people are typing`;
+  let label: string;
+  if (!isGroup) {
+    label = "typing…";
+  } else if (userIds.length === 1) {
+    const name = userNames[userIds[0]] ?? "Someone";
+    label = `${name} is typing`;
+  } else {
+    label = `${userIds.length} people are typing`;
+  }
 
   return (
     <div className="flex items-center gap-2 px-4 py-1.5">
-      {/* Animated dots */}
       <div className="flex items-center gap-0.5">
         {[0, 1, 2].map((i) => (
           <span

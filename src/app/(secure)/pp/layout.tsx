@@ -1,12 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apps } from "@/components/layout/apps/registry";
 import ChatSidebar from "@/components/pingpal/ChatSidebar";
-import { useWebSocket } from "@/hooks/useWebSocket";
+import {
+  PingPalWSProvider,
+  usePingPalWS,
+  type WSMessage,
+} from "@/components/pingpal/pingpal-ws-context";
+import {
+  requestNotificationPermission,
+  showMessageNotification,
+} from "@/lib/pingpal/notifications";
 
 export type Room = {
   id: string;
@@ -23,25 +31,47 @@ export type Room = {
   updated_at: string;
 };
 
-export type WSMessage = {
-  type: string;
-  // biome-ignore lint/suspicious/noExplicitAny: <later>
-  [key: string]: any;
-};
+export type { WSMessage };
 
 type PingPalLayoutProps = {
   children: React.ReactNode;
-  activeRoomId?: string;
 };
 
 export default function PingPalLayout({ children }: PingPalLayoutProps) {
   const { data: session } = useSession();
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [loadingRooms, setLoadingRooms] = useState(true);
+  const userId = session?.user?.id ?? "";
+
+  return (
+    <PingPalWSProvider userId={userId}>
+      <PingPalLayoutInner userId={userId}>{children}</PingPalLayoutInner>
+    </PingPalWSProvider>
+  );
+}
+
+function PingPalLayoutInner({ children, userId }: { children: React.ReactNode; userId: string }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const activeRoomId = searchParams.get("roomId") ?? undefined;
 
-  // Fetch all rooms for the current user
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [loadingRooms, setLoadingRooms] = useState(true);
+
+  const activeRoomIdRef = useRef(activeRoomId);
+  const userIdRef = useRef(userId);
+  const roomsRef = useRef(rooms);
+
+  useEffect(() => {
+    activeRoomIdRef.current = activeRoomId;
+  }, [activeRoomId]);
+
+  useEffect(() => {
+    userIdRef.current = userId;
+  }, [userId]);
+
+  useEffect(() => {
+    roomsRef.current = rooms;
+  }, [rooms]);
+
   const fetchRooms = useCallback(async () => {
     try {
       const res = await fetch("/api/pingpal/rooms");
@@ -64,35 +94,66 @@ export default function PingPalLayout({ children }: PingPalLayoutProps) {
     return () => window.removeEventListener("pingpal:rooms-changed", handler);
   }, [fetchRooms]);
 
-  // Handle incoming WebSocket messages at layout level
-  // so the room list stays live across all pages
+  useEffect(() => {
+    requestNotificationPermission();
+  }, []);
+
+  // Clear unread badge when switching to a room
+  useEffect(() => {
+    if (!activeRoomId) return;
+    setRooms((prev) => prev.map((r) => (r.id === activeRoomId ? { ...r, unread_count: 0 } : r)));
+  }, [activeRoomId]);
+
+  const { subscribe, send } = usePingPalWS();
+
   const handleWSMessage = useCallback(
     (msg: WSMessage) => {
       switch (msg.type) {
         case "new_message": {
-          // Update last_message and bump unread count for that room
+          const message = msg.message;
+          const isOwnMessage = message.sender_id === userIdRef.current;
+          const isActiveRoom = message.room_id === activeRoomIdRef.current;
+
           setRooms((prev) =>
             prev
               .map((r) =>
-                r.id === msg.message.room_id
+                r.id === message.room_id
                   ? {
                       ...r,
-                      last_message: msg.message,
-                      updated_at: msg.message.created_at,
-                      unread_count:
-                        r.id === activeRoomId
-                          ? 0 // already viewing this room
+                      last_message: message,
+                      updated_at: message.created_at,
+                      unread_count: isActiveRoom
+                        ? 0
+                        : isOwnMessage
+                          ? r.unread_count
                           : r.unread_count + 1,
                     }
                   : r,
               )
               .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()),
           );
+
+          if (!isOwnMessage && (!isActiveRoom || document.hidden)) {
+            const room = roomsRef.current.find((r) => r.id === message.room_id);
+            const preview = message.is_deleted
+              ? "Deleted message"
+              : message.content?.trim() || "New message";
+
+            showMessageNotification({
+              title: room?.display_name ?? "New message",
+              body: preview,
+              roomId: message.room_id,
+              onClick: () => {
+                const basePath =
+                  room?.type === "group" ? "/pp/messaging/groups" : "/pp/messaging/dm";
+                router.push(`${basePath}?roomId=${message.room_id}`);
+              },
+            });
+          }
           break;
         }
 
         case "room_created": {
-          // New room appeared (e.g. someone added you to a group)
           setRooms((prev) => [msg.room, ...prev]);
           break;
         }
@@ -103,25 +164,26 @@ export default function PingPalLayout({ children }: PingPalLayoutProps) {
         }
       }
     },
-    [activeRoomId],
+    [router],
   );
 
-  const { send } = useWebSocket(session?.user?.id ?? "", handleWSMessage);
+  // Register layout-level WS handler on the shared connection
+  useEffect(() => {
+    return subscribe(handleWSMessage);
+  }, [subscribe, handleWSMessage]);
 
   return (
     <div className="flex h-full overflow-hidden bg-background">
-      {/* Rooms sidebar */}
       <ChatSidebar
         rooms={rooms}
         loading={loadingRooms}
         activeRoomId={activeRoomId}
-        currentUserId={session?.user?.id ?? ""}
+        currentUserId={userId}
         onRoomsChange={fetchRooms}
         send={send}
         apps={apps}
       />
 
-      {/* Page content — DM or Group chat window */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
     </div>
   );

@@ -13,6 +13,7 @@ type MessageBubbleProps = {
   isOwn: boolean;
   senderName: string;
   senderNames: Record<string, string>;
+  messageSenderIds: Record<string, string>;
   isGroup?: boolean;
   currentUserId: string;
   onReact: (messageId: string, emoji: string) => void;
@@ -26,6 +27,7 @@ export default function MessageBubble({
   isOwn,
   senderName,
   senderNames,
+  messageSenderIds,
   isGroup,
   currentUserId,
   onReact,
@@ -67,7 +69,13 @@ export default function MessageBubble({
   }
 
   const replyPreview = getReplyPreview(message.reply_to);
-  const replySender = getReplySenderName(message.reply_to, senderNames);
+  const replySender = getReplySenderName(
+    message.reply_to,
+    senderNames,
+    currentUserId,
+    message.reply_to_id,
+    messageSenderIds,
+  );
 
   return (
     <div
@@ -123,18 +131,20 @@ export default function MessageBubble({
             <div
               className={`rounded-2xl px-3 py-2 text-sm leading-relaxed ${
                 isOwn
-                  ? "rounded-tr-sm bg-primary text-primary-foreground"
-                  : "rounded-tl-sm bg-muted text-foreground"
+                  ? "rounded-tr-sm bg-blue-500 text-white"
+                  : "rounded-tl-sm bg-green-500 text-white"
               }`}
             >
               {message.reply_to && replyPreview && (
                 <div
-                  className={`mb-1.5 rounded-lg border-l-2 py-0.5 pl-2 text-xs opacity-80 ${
-                    isOwn ? "border-primary-foreground/40" : "border-primary/40"
+                  className={`mb-1.5 rounded-lg border-l-2 py-1 pl-2.5 text-xs ${
+                    isOwn
+                      ? "border-blue-200/70 bg-blue-400/40"
+                      : "border-green-200/70 bg-green-400/40"
                   }`}
                 >
-                  <p className="font-medium opacity-90">{replySender}</p>
-                  <p className="truncate opacity-75">{replyPreview}</p>
+                  <p className="font-semibold text-white">{replySender}</p>
+                  <p className="truncate text-white/85">{replyPreview}</p>
                 </div>
               )}
 

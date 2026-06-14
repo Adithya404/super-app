@@ -133,7 +133,7 @@ async function handleMessage(userId: string, msg: any) {
 
     case "typing": {
       const { roomId, isTyping } = msg;
-      broadcastToRoom(roomId, { type: "typing", userId, isTyping }, userId);
+      broadcastToRoom(roomId, { type: "typing", roomId, userId, isTyping }, userId);
       break;
     }
 

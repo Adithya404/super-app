@@ -10,77 +10,70 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import ChatWindow from "@/components/pingpal/ChatWindow";
 import CreateGroupDialog from "@/components/pingpal/CreateGroupDialog";
 import EmptyState from "@/components/pingpal/EmptyState";
-import { useWebSocket } from "@/hooks/useWebSocket";
-import { applyReactionUpdate } from "@/lib/pingpal/messages";
-import type { Message } from "@/lib/pingpal/types";
+import { usePingPalWS } from "@/components/pingpal/pingpal-ws-context";
+import { useRoomMessages } from "@/hooks/useRoomMessages";
 
 export default function GroupsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const roomId = searchParams.get("roomId");
+  const knownUnreadCount = Number.parseInt(searchParams.get("unread") ?? "0", 10) || 0;
   const { data: session } = useSession();
+  const currentUserId = session?.user?.id ?? "";
 
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loadingMessages, setLoadingMessages] = useState(false);
+  const {
+    messages,
+    loading,
+    loadingMore,
+    loadingNewer,
+    hasMore,
+    hasMoreNewer,
+    firstUnreadMessageId,
+    loadMore,
+    loadNewer,
+    handleWSMessage,
+    updateMessage,
+    markMessageDeleted,
+    clearUnreadAnchor,
+  } = useRoomMessages(roomId, knownUnreadCount);
+
   const [isTyping, setIsTyping] = useState<Record<string, boolean>>({});
   const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
 
-  const fetchMessages = useCallback(async (rid: string) => {
-    setLoadingMessages(true);
-    try {
-      const res = await fetch(`/api/pingpal/rooms/${rid}/messages`);
-      const data = await res.json();
-      setMessages(data.messages ?? []);
-    } catch (err) {
-      console.error("Failed to fetch messages:", err);
-    } finally {
-      setLoadingMessages(false);
-    }
-  }, []);
+  const sendRef = useRef<(msg: any) => void>(() => {});
+
+  const handleMarkRead = useCallback(() => {
+    if (roomId) sendRef.current({ type: "mark_read", roomId });
+  }, [roomId]);
 
   useEffect(() => {
     if (!roomId) return;
-    setMessages([]);
     setIsTyping({});
-    fetchMessages(roomId);
-  }, [roomId, fetchMessages]);
+  }, [roomId]);
 
-  const sendRef = useRef<(msg: any) => void>(() => {});
-
-  const handleWSMessage = useCallback(
+  const onWSMessage = useCallback(
     (msg: any) => {
+      handleWSMessage(msg);
+
       switch (msg.type) {
         case "new_message": {
           if (msg.message.room_id !== roomId) return;
-          setMessages((prev) => [...prev, msg.message]);
-          if (roomId) sendRef.current({ type: "mark_read", roomId });
-          break;
-        }
-
-        case "message_edited": {
-          if (msg.message.room_id !== roomId) return;
-          setMessages((prev) => prev.map((m) => (m.id === msg.message.id ? msg.message : m)));
-          break;
-        }
-
-        case "message_deleted": {
-          if (msg.roomId && msg.roomId !== roomId) return;
-          setMessages((prev) =>
-            prev.map((m) => (m.id === msg.messageId ? { ...m, is_deleted: true, content: "" } : m)),
-          );
+          handleMarkRead();
           break;
         }
 
         case "typing": {
-          if (msg.userId === session?.user?.id) return;
-          setIsTyping((prev) => ({ ...prev, [msg.userId]: msg.isTyping }));
-          break;
-        }
-
-        case "reaction": {
-          if (!roomId) return;
-          setMessages((prev) => applyReactionUpdate(prev, msg));
+          if (msg.roomId !== roomId) return;
+          if (msg.userId === currentUserId) return;
+          setIsTyping((prev) => {
+            if (!msg.isTyping) {
+              const next = { ...prev };
+              delete next[msg.userId];
+              return next;
+            }
+            return { ...prev, [msg.userId]: true };
+          });
           break;
         }
 
@@ -89,11 +82,20 @@ export default function GroupsPage() {
           break;
       }
     },
-    [roomId, session?.user?.id],
+    [roomId, currentUserId, handleWSMessage, handleMarkRead],
   );
 
-  const { send } = useWebSocket(session?.user?.id ?? "", handleWSMessage);
+  const { send, subscribe } = usePingPalWS();
   sendRef.current = send;
+
+  useEffect(() => {
+    return subscribe(onWSMessage);
+  }, [subscribe, onWSMessage]);
+
+  useEffect(() => {
+    if (!roomId || loading || firstUnreadMessageId || knownUnreadCount > 0) return;
+    handleMarkRead();
+  }, [roomId, loading, firstUnreadMessageId, knownUnreadCount, handleMarkRead]);
 
   const handleSend = useCallback(
     (content: string, replyToId?: string) => {
@@ -131,10 +133,10 @@ export default function GroupsPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setMessages((prev) => prev.map((m) => (m.id === messageId ? data.message : m)));
+        updateMessage(messageId, data.message);
       }
     },
-    [roomId],
+    [roomId, updateMessage],
   );
 
   const handleDelete = useCallback(
@@ -144,12 +146,10 @@ export default function GroupsPage() {
         method: "DELETE",
       });
       if (res.ok) {
-        setMessages((prev) =>
-          prev.map((m) => (m.id === messageId ? { ...m, is_deleted: true, content: "" } : m)),
-        );
+        markMessageDeleted(messageId);
       }
     },
-    [roomId],
+    [roomId, markMessageDeleted],
   );
 
   return (
@@ -174,14 +174,23 @@ export default function GroupsPage() {
         <ChatWindow
           roomId={roomId}
           messages={messages}
-          loading={loadingMessages}
-          currentUserId={session?.user?.id ?? ""}
+          loading={loading}
+          loadingMore={loadingMore}
+          loadingNewer={loadingNewer}
+          hasMore={hasMore}
+          hasMoreNewer={hasMoreNewer}
+          firstUnreadMessageId={firstUnreadMessageId}
+          currentUserId={currentUserId}
           isTyping={isTyping}
           onSend={handleSend}
           onTyping={handleTyping}
           onReact={handleReact}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          onLoadMore={loadMore}
+          onLoadNewer={loadNewer}
+          onMarkRead={handleMarkRead}
+          onClearUnreadAnchor={clearUnreadAnchor}
           send={send}
           isGroup
         />

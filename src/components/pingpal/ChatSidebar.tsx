@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Room, WSMessage } from "@/app/(secure)/pp/layout";
+import { requestNotificationPermission } from "@/lib/pingpal/notifications";
 import type { AppConfig } from "../layout/apps";
 
 type ChatSidebarProps = {
@@ -49,9 +50,10 @@ export default function ChatSidebar({
   });
 
   function handleRoomClick(room: Room) {
+    requestNotificationPermission();
     const basePath = room.type === "dm" ? "/pp/messaging/dm" : "/pp/messaging/groups";
-    router.push(`${basePath}?roomId=${room.id}`);
-    // Tell WS server we're in this room
+    const unreadQuery = room.unread_count > 0 ? `&unread=${room.unread_count}` : "";
+    router.push(`${basePath}?roomId=${room.id}${unreadQuery}`);
     send({ type: "join_room", roomId: room.id });
   }
 

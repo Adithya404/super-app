@@ -47,7 +47,16 @@ export function getReplyPreview(replyTo: Message["reply_to"]) {
 export function getReplySenderName(
   replyTo: Message["reply_to"],
   senderNames: Record<string, string>,
+  currentUserId: string,
+  replyToId?: string | null,
+  messageSenderIds?: Record<string, string>,
 ) {
-  if (!replyTo?.sender_id) return "Unknown";
-  return senderNames[replyTo.sender_id] ?? "Unknown";
+  const senderId =
+    replyTo?.sender_id ??
+    (replyTo?.id ? messageSenderIds?.[replyTo.id] : undefined) ??
+    (replyToId ? messageSenderIds?.[replyToId] : undefined);
+
+  if (!senderId) return "Unknown";
+  if (senderId === currentUserId) return "Me";
+  return senderNames[senderId] ?? "Unknown";
 }
