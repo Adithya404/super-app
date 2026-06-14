@@ -20,10 +20,10 @@ type PingPalWSContextValue = {
 const PingPalWSContext = createContext<PingPalWSContextValue | null>(null);
 
 export function PingPalWSProvider({
-  userId,
+  enabled,
   children,
 }: {
-  userId: string;
+  enabled: boolean;
   children: React.ReactNode;
 }) {
   const subscribersRef = useRef<Set<Handler>>(new Set());
@@ -34,7 +34,7 @@ export function PingPalWSProvider({
     }
   }, []);
 
-  const { send } = useWebSocket(userId, dispatch);
+  const { send } = useWebSocket(enabled, dispatch);
 
   const subscribe = useCallback((handler: Handler) => {
     subscribersRef.current.add(handler);

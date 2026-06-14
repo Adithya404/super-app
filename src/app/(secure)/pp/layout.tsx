@@ -40,9 +40,10 @@ type PingPalLayoutProps = {
 export default function PingPalLayout({ children }: PingPalLayoutProps) {
   const { data: session } = useSession();
   const userId = session?.user?.id ?? "";
+  const wsEnabled = Boolean(userId);
 
   return (
-    <PingPalWSProvider userId={userId}>
+    <PingPalWSProvider enabled={wsEnabled}>
       <PingPalLayoutInner userId={userId}>{children}</PingPalLayoutInner>
     </PingPalWSProvider>
   );

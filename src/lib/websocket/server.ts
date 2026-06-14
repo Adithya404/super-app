@@ -5,6 +5,7 @@ import type { IncomingMessage } from "node:http";
 import { WebSocket, type WebSocketServer } from "ws";
 import { pingpalPool } from "@/lib/db";
 import { MESSAGE_SELECT } from "@/lib/pingpal/message-query";
+import { verifyWsToken } from "@/lib/websocket/token";
 
 export type WSClient = {
   ws: WebSocket;
@@ -34,62 +35,66 @@ export function broadcastToRoom(roomId: string, payload: object, excludeUserId?:
 
 export function initWebSocketServer(wss: WebSocketServer) {
   wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
-    // Extract userId from query string (?userId=xxx)
-    // In production use a short-lived token instead
-    const url = new URL(req.url ?? "", `http://localhost`);
-    const userId = url.searchParams.get("userId");
+    void acceptConnection(ws, req);
+  });
+}
 
-    if (!userId) {
-      ws.close(1008, "userId required");
-      return;
+async function acceptConnection(ws: WebSocket, req: IncomingMessage) {
+  const url = new URL(req.url ?? "", "http://localhost");
+  const token = url.searchParams.get("token");
+
+  if (!token) {
+    ws.close(1008, "token required");
+    return;
+  }
+
+  const userId = await verifyWsToken(token);
+  if (!userId) {
+    ws.close(1008, "invalid token");
+    return;
+  }
+
+  // Register client (replaces any stale socket for this user)
+  const client: WSClient = { ws, userId, rooms: new Set() };
+  clients.set(userId, client);
+
+  pingpalPool.query(
+    `INSERT INTO pingpal.user_presence (user_id, is_online, last_seen)
+     VALUES ($1, true, NOW())
+     ON CONFLICT (user_id) DO UPDATE SET is_online = true, last_seen = NOW()`,
+    [userId],
+  );
+
+  pingpalPool
+    .query(`SELECT room_id FROM pingpal.room_members WHERE user_id = $1`, [userId])
+    .then(({ rows }) => {
+      rows.forEach(({ room_id }) => {
+        client.rooms.add(room_id);
+        if (!roomClients.has(room_id)) roomClients.set(room_id, new Set());
+        roomClients.get(room_id)?.add(userId);
+      });
+    });
+
+  ws.on("message", async (raw) => {
+    try {
+      const msg = JSON.parse(raw.toString());
+      await handleMessage(userId, msg);
+    } catch (e) {
+      console.error("WS message error:", e);
     }
+  });
 
-    // Register client
-    const client: WSClient = { ws, userId, rooms: new Set() };
-    clients.set(userId, client);
-
-    // Mark user online in DB
+  ws.on("close", () => {
+    clients.delete(userId);
+    client.rooms.forEach((roomId) => {
+      roomClients.get(roomId)?.delete(userId);
+    });
     pingpalPool.query(
       `INSERT INTO pingpal.user_presence (user_id, is_online, last_seen)
-       VALUES ($1, true, NOW())
-       ON CONFLICT (user_id) DO UPDATE SET is_online = true, last_seen = NOW()`,
+       VALUES ($1, false, NOW())
+       ON CONFLICT (user_id) DO UPDATE SET is_online = false, last_seen = NOW()`,
       [userId],
     );
-
-    // Load user's rooms and subscribe them
-    pingpalPool
-      .query(`SELECT room_id FROM pingpal.room_members WHERE user_id = $1`, [userId])
-      .then(({ rows }) => {
-        rows.forEach(({ room_id }) => {
-          client.rooms.add(room_id);
-          if (!roomClients.has(room_id)) roomClients.set(room_id, new Set());
-          roomClients.get(room_id)?.add(userId);
-        });
-      });
-
-    // Handle incoming messages
-    ws.on("message", async (raw) => {
-      try {
-        const msg = JSON.parse(raw.toString());
-        await handleMessage(userId, msg);
-      } catch (e) {
-        console.error("WS message error:", e);
-      }
-    });
-
-    // Handle disconnect
-    ws.on("close", () => {
-      clients.delete(userId);
-      client.rooms.forEach((roomId) => {
-        roomClients.get(roomId)?.delete(userId);
-      });
-      pingpalPool.query(
-        `INSERT INTO pingpal.user_presence (user_id, is_online, last_seen)
-         VALUES ($1, false, NOW())
-         ON CONFLICT (user_id) DO UPDATE SET is_online = false, last_seen = NOW()`,
-        [userId],
-      );
-    });
   });
 }
 
