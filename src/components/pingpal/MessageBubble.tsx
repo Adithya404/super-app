@@ -3,6 +3,8 @@
 
 import { Pencil, Reply, Smile, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
+import CallMessageBubble from "@/components/pingpal/CallMessageBubble";
+import { parseCallMessage } from "@/lib/pingpal/call-messages";
 import { getReplyPreview, getReplySenderName } from "@/lib/pingpal/messages";
 import type { Message } from "@/lib/pingpal/types";
 
@@ -66,6 +68,15 @@ export default function MessageBubble({
         </span>
       </div>
     );
+  }
+
+  if (message.type === "call") {
+    const payload = parseCallMessage(message.content);
+    if (payload) {
+      return (
+        <CallMessageBubble message={message} payload={payload} currentUserId={currentUserId} />
+      );
+    }
   }
 
   const replyPreview = getReplyPreview(message.reply_to);

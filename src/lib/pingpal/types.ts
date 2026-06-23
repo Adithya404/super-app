@@ -9,7 +9,7 @@ export type Message = {
   room_id: string;
   sender_id: string;
   content: string;
-  type: "text" | "image" | "file" | "system";
+  type: "text" | "image" | "file" | "system" | "call";
   file_url: string | null;
   reply_to_id: string | null;
   reply_to?: {

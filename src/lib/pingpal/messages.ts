@@ -1,3 +1,4 @@
+import { getCallMessageDisplay, parseCallMessage } from "@/lib/pingpal/call-messages";
 import type { Message } from "@/lib/pingpal/types";
 
 export function applyReactionUpdate(
@@ -59,4 +60,32 @@ export function getReplySenderName(
   if (!senderId) return "Unknown";
   if (senderId === currentUserId) return "Me";
   return senderNames[senderId] ?? "Unknown";
+}
+
+type MessagePreviewSource = {
+  content: string;
+  type?: Message["type"];
+  sender_id?: string;
+  is_deleted?: boolean;
+};
+
+export function getMessagePreview(
+  message: MessagePreviewSource | null | undefined,
+  currentUserId?: string,
+): string {
+  if (!message) return "No messages yet";
+  if (message.is_deleted) return "Deleted message";
+
+  if (message.type === "call") {
+    const payload = parseCallMessage(message.content);
+    if (payload && currentUserId) {
+      const { label, subtitle } = getCallMessageDisplay(payload, currentUserId);
+      return subtitle ? `${label} · ${subtitle}` : label;
+    }
+    if (payload) {
+      return payload.callType === "video" ? "Video call" : "Voice call";
+    }
+  }
+
+  return message.content?.trim() || "New message";
 }

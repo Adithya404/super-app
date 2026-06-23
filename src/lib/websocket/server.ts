@@ -4,6 +4,12 @@
 import type { IncomingMessage } from "node:http";
 import { WebSocket, type WebSocketServer } from "ws";
 import { pingpalPool } from "@/lib/db";
+import {
+  createCallRecord,
+  finalizeCall,
+  markCallAnswered,
+  resolveTerminalStatus,
+} from "@/lib/pingpal/call-log";
 import { MESSAGE_SELECT } from "@/lib/pingpal/message-query";
 import { verifyWsToken } from "@/lib/websocket/token";
 
@@ -30,6 +36,70 @@ export function broadcastToRoom(roomId: string, payload: object, excludeUserId?:
     if (client?.ws.readyState === WebSocket.OPEN) {
       client.ws.send(data);
     }
+  });
+}
+
+export function sendToUser(userId: string, payload: object) {
+  const client = clients.get(userId);
+  if (client?.ws.readyState === WebSocket.OPEN) {
+    client.ws.send(JSON.stringify(payload));
+  }
+}
+
+async function verifyRoomMembership(roomId: string, userId: string) {
+  const { rows } = await pingpalPool.query(
+    `SELECT 1 FROM pingpal.room_members WHERE room_id = $1 AND user_id = $2`,
+    [roomId, userId],
+  );
+  return rows.length > 0;
+}
+
+async function handleCallTermination(params: {
+  callId: string;
+  event: "call_rejected" | "call_end";
+  endedByUserId: string;
+  toUserId: string;
+  reason?: "declined" | "timeout";
+}) {
+  const { rows } = await pingpalPool.query<{
+    initiator_id: string;
+    status: string;
+    room_id: string;
+  }>(`SELECT initiator_id, status, room_id FROM pingpal.calls WHERE id = $1`, [params.callId]);
+  const callMeta = rows[0];
+
+  if (callMeta) {
+    const terminalStatus = resolveTerminalStatus({
+      event: params.event,
+      callStatus: callMeta.status,
+      initiatorId: callMeta.initiator_id,
+      endedByUserId: params.endedByUserId,
+      reason: params.reason,
+    });
+
+    const result = await finalizeCall({
+      callId: params.callId,
+      terminalStatus,
+      endedByUserId: params.endedByUserId,
+    });
+
+    if (result) {
+      broadcastToRoom(result.call.room_id, { type: "new_message", message: result.message });
+      if (result.notifyInitiator && result.notifyInitiator !== params.endedByUserId) {
+        sendToUser(result.notifyInitiator, {
+          type: "call_result",
+          callId: params.callId,
+          status: terminalStatus,
+          message: result.resultMessage,
+        });
+      }
+    }
+  }
+
+  sendToUser(params.toUserId, {
+    type: params.event,
+    fromUserId: params.endedByUserId,
+    callId: params.callId,
   });
 }
 
@@ -187,6 +257,86 @@ async function handleMessage(userId: string, msg: any) {
       client.rooms.add(roomId);
       if (!roomClients.has(roomId)) roomClients.set(roomId, new Set());
       roomClients.get(roomId)?.add(userId);
+      break;
+    }
+
+    case "call_user": {
+      const { toUserId, roomId, callId, offer, callType } = msg;
+      if (!toUserId || !roomId || !callId || !offer) return;
+      if (!(await verifyRoomMembership(roomId, userId))) return;
+      if (!(await verifyRoomMembership(roomId, toUserId))) return;
+
+      await createCallRecord({
+        callId,
+        roomId,
+        initiatorId: userId,
+        recipientId: toUserId,
+        callType: callType ?? "video",
+      });
+
+      sendToUser(toUserId, {
+        type: "incoming_call",
+        fromUserId: userId,
+        roomId,
+        callId,
+        offer,
+        callType: callType ?? "video",
+      });
+      break;
+    }
+
+    case "call_accepted": {
+      const { toUserId, callId, answer } = msg;
+      if (!toUserId || !callId || !answer) return;
+
+      await markCallAnswered(callId);
+
+      sendToUser(toUserId, {
+        type: "call_accepted",
+        fromUserId: userId,
+        callId,
+        answer,
+      });
+      break;
+    }
+
+    case "call_rejected": {
+      const { toUserId, callId, reason } = msg;
+      if (!toUserId || !callId) return;
+
+      await handleCallTermination({
+        callId,
+        event: "call_rejected",
+        endedByUserId: userId,
+        toUserId,
+        reason: reason === "timeout" ? "timeout" : "declined",
+      });
+      break;
+    }
+
+    case "ice_candidate": {
+      const { toUserId, callId, candidate } = msg;
+      if (!toUserId || !callId || !candidate) return;
+
+      sendToUser(toUserId, {
+        type: "ice_candidate",
+        fromUserId: userId,
+        callId,
+        candidate,
+      });
+      break;
+    }
+
+    case "call_end": {
+      const { toUserId, callId } = msg;
+      if (!toUserId || !callId) return;
+
+      await handleCallTermination({
+        callId,
+        event: "call_end",
+        endedByUserId: userId,
+        toUserId,
+      });
       break;
     }
   }

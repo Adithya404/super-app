@@ -1,9 +1,10 @@
 "use client";
 
-import { LogOut, MoreVertical, Settings, UserPlus, Users } from "lucide-react";
+import { LogOut, MoreVertical, Phone, Settings, UserPlus, Users, Video } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { Room } from "@/app/(secure)/pp/layout";
+import { useCall } from "@/components/pingpal/call/call-context";
 import AddMembersDialog from "./AddMembersDialog";
 import GroupSettingsDialog from "./GroupSettingsDialog";
 
@@ -30,7 +31,9 @@ export default function RoomHeader({
   onRoomUpdate,
 }: RoomHeaderProps) {
   const router = useRouter();
+  const { startCall, call } = useCall();
   const [members, setMembers] = useState<RoomMember[]>([]);
+  const [startingCall, setStartingCall] = useState<"audio" | "video" | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [showAddMembers, setShowAddMembers] = useState(false);
@@ -60,6 +63,23 @@ export default function RoomHeader({
     : dmPartner?.is_online
       ? "Online"
       : "Offline";
+
+  async function handleStartCall(callType: "audio" | "video") {
+    if (isGroup || !dmPartner || call.status !== "idle") return;
+    setStartingCall(callType);
+    try {
+      await startCall({
+        roomId: room.id,
+        toUserId: dmPartner.user_id,
+        remoteUserName: dmPartner.name ?? dmPartner.email,
+        callType,
+      });
+    } catch (err) {
+      console.error("Failed to start call:", err);
+    } finally {
+      setStartingCall(null);
+    }
+  }
 
   async function handleLeave() {
     if (!confirm(isGroup ? "Leave this group?" : "Delete this conversation?")) return;
@@ -95,6 +115,29 @@ export default function RoomHeader({
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
+          {!isGroup && dmPartner && (
+            <>
+              <button
+                type="button"
+                onClick={() => void handleStartCall("audio")}
+                disabled={call.status !== "idle" || startingCall !== null}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                title="Audio call"
+              >
+                <Phone size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleStartCall("video")}
+                disabled={call.status !== "idle" || startingCall !== null}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                title="Video call"
+              >
+                <Video size={16} />
+              </button>
+            </>
+          )}
+
           {isGroup && (
             <button
               type="button"

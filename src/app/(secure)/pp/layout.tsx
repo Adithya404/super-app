@@ -6,11 +6,15 @@ import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SidebarSlot } from "@/components/layout/sidebar-slot";
 import ChatSidebar from "@/components/pingpal/ChatSidebar";
+import CallOverlay from "@/components/pingpal/call/CallOverlay";
+import { CallProvider } from "@/components/pingpal/call/call-context";
+import IncomingCallDialog from "@/components/pingpal/call/IncomingCallDialog";
 import {
   PingPalWSProvider,
   usePingPalWS,
   type WSMessage,
 } from "@/components/pingpal/pingpal-ws-context";
+import { getMessagePreview } from "@/lib/pingpal/messages";
 import {
   requestNotificationPermission,
   showMessageNotification,
@@ -25,8 +29,10 @@ export type Room = {
   unread_count: number;
   last_message: {
     content: string;
+    type?: "text" | "image" | "file" | "system" | "call";
     sender_id: string;
     created_at: string;
+    is_deleted?: boolean;
   } | null;
   updated_at: string;
 };
@@ -44,7 +50,11 @@ export default function PingPalLayout({ children }: PingPalLayoutProps) {
 
   return (
     <PingPalWSProvider enabled={wsEnabled}>
-      <PingPalLayoutInner userId={userId}>{children}</PingPalLayoutInner>
+      <CallProvider>
+        <PingPalLayoutInner userId={userId}>{children}</PingPalLayoutInner>
+        <CallOverlay />
+        <IncomingCallDialog />
+      </CallProvider>
     </PingPalWSProvider>
   );
 }
@@ -138,9 +148,7 @@ function PingPalLayoutInner({ children, userId }: { children: React.ReactNode; u
 
           if (!isOwnMessage && (!isActiveRoom || document.hidden)) {
             const room = roomsRef.current.find((r) => r.id === message.room_id);
-            const preview = message.is_deleted
-              ? "Deleted message"
-              : message.content?.trim() || "New message";
+            const preview = getMessagePreview(message, userIdRef.current);
 
             showMessageNotification({
               title: room?.display_name ?? "New message",

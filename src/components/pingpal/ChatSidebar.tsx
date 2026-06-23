@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Room, WSMessage } from "@/app/(secure)/pp/layout";
+import { getMessagePreview } from "@/lib/pingpal/messages";
 import { requestNotificationPermission } from "@/lib/pingpal/notifications";
 import type { Team } from "@/lib/sidebar/types";
 import { getSwitcherTeams, getTeamLandingUrl } from "@/lib/teams";
@@ -25,7 +26,7 @@ export default function ChatSidebar({
   rooms,
   loading,
   activeRoomId,
-  // currentUserId,
+  currentUserId,
   onRoomsChange,
   send,
   teams,
@@ -47,10 +48,11 @@ export default function ChatSidebar({
   // Filter rooms by tab and search
   const filtered = rooms.filter((r) => {
     const matchesTab = r.type === tab;
+    const preview = r.last_message ? getMessagePreview(r.last_message, currentUserId) : "";
     const matchesSearch =
       !search ||
       r.display_name?.toLowerCase().includes(search.toLowerCase()) ||
-      r.last_message?.content?.toLowerCase().includes(search.toLowerCase());
+      preview.toLowerCase().includes(search.toLowerCase());
     return matchesTab && matchesSearch;
   });
 
@@ -351,7 +353,7 @@ export default function ChatSidebar({
                     room.unread_count > 0 ? "text-foreground/80" : "text-muted-foreground"
                   }`}
                 >
-                  {room.last_message?.content ?? "No messages yet"}
+                  {getMessagePreview(room.last_message, currentUserId)}
                 </p>
               </div>
             </button>

@@ -26,3 +26,24 @@ export function showMessageNotification(options: {
     notification.close();
   };
 }
+
+export function showIncomingCallNotification(options: {
+  title: string;
+  body: string;
+  callId: string;
+}) {
+  if (typeof window === "undefined" || !("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
+
+  const notification = new Notification(options.title, {
+    body: options.body,
+    tag: `pingpal-call-${options.callId}`,
+    icon: "/favicon.ico",
+    requireInteraction: true,
+  });
+
+  notification.onclick = () => {
+    window.focus();
+    notification.close();
+  };
+}
