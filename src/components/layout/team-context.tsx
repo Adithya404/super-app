@@ -16,6 +16,20 @@ export function TeamProvider({ teams, children }: { teams: Team[]; children: Rea
     teams.length > 0 ? teams[0] : null,
   );
 
+  React.useEffect(() => {
+    if (teams.length === 0) {
+      setActiveTeam(null);
+      return;
+    }
+
+    setActiveTeam((current) => {
+      if (current && teams.some((team) => team.teamPath === current.teamPath)) {
+        return current;
+      }
+      return teams[0];
+    });
+  }, [teams]);
+
   return (
     <TeamContext.Provider value={{ teams, activeTeam, setActiveTeam }}>
       {children}

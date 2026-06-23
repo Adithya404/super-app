@@ -4,7 +4,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { apps } from "@/components/layout/apps/registry";
+import { SidebarSlot } from "@/components/layout/sidebar-slot";
 import ChatSidebar from "@/components/pingpal/ChatSidebar";
 import {
   PingPalWSProvider,
@@ -50,6 +50,8 @@ export default function PingPalLayout({ children }: PingPalLayoutProps) {
 }
 
 function PingPalLayoutInner({ children, userId }: { children: React.ReactNode; userId: string }) {
+  const { data: session } = useSession();
+  const userTeams = session?.user?.teams ?? [];
   const router = useRouter();
   const searchParams = useSearchParams();
   const activeRoomId = searchParams.get("roomId") ?? undefined;
@@ -174,18 +176,20 @@ function PingPalLayoutInner({ children, userId }: { children: React.ReactNode; u
   }, [subscribe, handleWSMessage]);
 
   return (
-    <div className="flex h-full overflow-hidden bg-background">
-      <ChatSidebar
-        rooms={rooms}
-        loading={loadingRooms}
-        activeRoomId={activeRoomId}
-        currentUserId={userId}
-        onRoomsChange={fetchRooms}
-        send={send}
-        apps={apps}
-      />
+    <>
+      <SidebarSlot>
+        <ChatSidebar
+          rooms={rooms}
+          loading={loadingRooms}
+          activeRoomId={activeRoomId}
+          currentUserId={userId}
+          onRoomsChange={fetchRooms}
+          send={send}
+          teams={userTeams}
+        />
+      </SidebarSlot>
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
-    </div>
+      <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
+    </>
   );
 }

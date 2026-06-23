@@ -6,7 +6,10 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Room, WSMessage } from "@/app/(secure)/pp/layout";
 import { requestNotificationPermission } from "@/lib/pingpal/notifications";
-import type { AppConfig } from "../layout/apps";
+import type { Team } from "@/lib/sidebar/types";
+import { getSwitcherTeams, getTeamLandingUrl } from "@/lib/teams";
+import { apps } from "../layout/apps/registry";
+import { SidebarUserFooter } from "../layout/SidebarUserFooter";
 
 type ChatSidebarProps = {
   rooms: Room[];
@@ -15,7 +18,7 @@ type ChatSidebarProps = {
   currentUserId: string;
   onRoomsChange: () => void;
   send: (msg: WSMessage) => void;
-  apps: AppConfig[];
+  teams: Team[];
 };
 
 export default function ChatSidebar({
@@ -25,10 +28,14 @@ export default function ChatSidebar({
   // currentUserId,
   onRoomsChange,
   send,
-  apps,
+  teams,
 }: ChatSidebarProps) {
   const router = useRouter();
-  // const pathname = usePathname();
+  const availableTeams = getSwitcherTeams(teams);
+  const getAppMeta = (team: Team) => apps.find((app) => app.basePath === team.teamPath);
+  const currentTeam = availableTeams.find((team) => team.teamPath === "/pp") ?? availableTeams[0];
+  const currentApp = currentTeam ? getAppMeta(currentTeam) : null;
+
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<"dm" | "group">("dm");
   const [showNewDM, setShowNewDM] = useState(false);
@@ -36,8 +43,6 @@ export default function ChatSidebar({
   const [dmLoading, setDmLoading] = useState(false);
   const [dmError, setDmError] = useState("");
   const [appDropdownOpen, setAppDropdownOpen] = useState(false);
-  const currentApp = apps.find((a) => a.key === "pingpal") ?? apps[0];
-  // const isDMPage = pathname.includes("/dm");
 
   // Filter rooms by tab and search
   const filtered = rooms.filter((r) => {
@@ -103,48 +108,60 @@ export default function ChatSidebar({
   }
 
   return (
-    <div className="flex w-72 shrink-0 flex-col overflow-hidden border-border border-r bg-background">
+    <div className="flex h-full w-72 shrink-0 flex-col overflow-hidden border-border border-r bg-background">
       {/* Header */}
       {/* ── App Switcher (replaces AppShell sidebar) ── */}
       <div className="relative border-border border-b p-2">
-        <button
-          type="button"
-          onClick={() => setAppDropdownOpen((v) => !v)}
-          className="flex w-full items-center gap-2 rounded-md bg-muted px-2 py-1.5 font-medium text-sm transition-colors hover:bg-muted/80"
-        >
-          <span
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded font-bold text-[10px] text-white"
-            style={{ background: currentApp.color }}
+        {currentApp && currentTeam ? (
+          <button
+            type="button"
+            onClick={() => setAppDropdownOpen((v) => !v)}
+            className="flex w-full items-center gap-2 rounded-md bg-muted px-2 py-1.5 font-medium text-sm transition-colors hover:bg-muted/80"
           >
-            {currentApp.abbr}
-          </span>
-          <span className="flex-1 truncate text-left text-xs">{currentApp.name}</span>
-          <ChevronsUpDown size={13} className="shrink-0 opacity-40" />
-        </button>
+            <span
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded font-bold text-[10px] text-white"
+              style={{ background: currentApp.color }}
+            >
+              {currentApp.abbr}
+            </span>
+            <span className="flex-1 truncate text-left text-xs">{currentTeam.name}</span>
+            <ChevronsUpDown size={13} className="shrink-0 opacity-40" />
+          </button>
+        ) : null}
 
         {appDropdownOpen && (
           <div className="absolute top-full right-2 left-2 z-50 mt-1 overflow-hidden rounded-lg border border-border bg-background py-1 shadow-lg">
-            {apps.map((app) => (
-              <button
-                type="button"
-                key={app.key}
-                onClick={() => {
-                  setAppDropdownOpen(false);
-                  router.push(`${app.basePath}`);
-                }}
-                className={`flex w-full items-center gap-2 px-3 py-2 text-xs transition-colors hover:bg-muted ${
-                  app.key === "pingpal" ? "font-medium text-foreground" : "text-muted-foreground"
-                }`}
-              >
-                <span
-                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded font-bold text-[9px] text-white"
-                  style={{ background: app.color }}
+            {availableTeams.map((team) => {
+              const app = getAppMeta(team);
+              const landingUrl = getTeamLandingUrl(team);
+              if (!app || !landingUrl) {
+                return null;
+              }
+
+              return (
+                <button
+                  type="button"
+                  key={team.teamPath}
+                  onClick={() => {
+                    setAppDropdownOpen(false);
+                    router.push(landingUrl);
+                  }}
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-xs transition-colors hover:bg-muted ${
+                    team.teamPath === "/pp"
+                      ? "font-medium text-foreground"
+                      : "text-muted-foreground"
+                  }`}
                 >
-                  {app.abbr}
-                </span>
-                {app.name}
-              </button>
-            ))}
+                  <span
+                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded font-bold text-[9px] text-white"
+                    style={{ background: app.color }}
+                  >
+                    {app.abbr}
+                  </span>
+                  {team.name}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -341,6 +358,8 @@ export default function ChatSidebar({
           ))
         )}
       </div>
+
+      <SidebarUserFooter variant="light" />
     </div>
   );
 }

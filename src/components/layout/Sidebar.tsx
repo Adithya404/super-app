@@ -15,7 +15,6 @@ import {
   GalleryVerticalEnd,
   GraduationCap,
   Hammer,
-  LogOut,
   type LucideIcon,
   MapPin,
   MessageCircle,
@@ -31,12 +30,11 @@ import {
   Users,
   Waypoints,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { Button } from "../ui/button";
+import { SidebarUserFooter } from "./SidebarUserFooter";
 import { TeamSwitcher } from "./TeamSwitcher";
 import { useTeamContext } from "./team-context";
 
@@ -70,15 +68,7 @@ const iconMap: Record<string, LucideIcon> = {
   Code,
 };
 
-type SidebarProps = {
-  user: {
-    name?: string | null;
-    email?: string | null;
-    image?: string | null;
-  };
-};
-
-export default function Sidebar({ user }: SidebarProps) {
+export default function Sidebar() {
   const pathname = usePathname();
   const { teams, activeTeam, setActiveTeam } = useTeamContext();
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -137,16 +127,6 @@ export default function Sidebar({ user }: SidebarProps) {
 
   function toggleGroup(key: string) {
     setCollapsedGroups((prev) => ({ ...prev, [key]: !prev[key] }));
-  }
-
-  function getInitials(name?: string | null) {
-    if (!name) return "U";
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
   }
 
   return (
@@ -239,36 +219,7 @@ export default function Sidebar({ user }: SidebarProps) {
         )}
       </nav>
 
-      {/* User Footer */}
-      <div className="border-white/8 border-t p-2">
-        <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
-          {user.image ? (
-            <Image
-              src={user.image}
-              alt={user.name ?? "User"}
-              width={28}
-              height={28}
-              className="rounded-full"
-            />
-          ) : (
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-[11px] text-primary-foreground">
-              {getInitials(user.name)}
-            </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-medium text-[#e2e5ec] text-[12px]">{user.name ?? "User"}</p>
-            <p className="truncate text-[#9ba3b2] text-[11px]">{user.email}</p>
-          </div>
-          <Button
-            onClick={() => signOut({ callbackUrl: "/auth" })}
-            className="h-8 w-8 rounded-full bg-transparent text-[#9ba3b2] transition-colors hover:bg-white/10 hover:text-white"
-            title="Sign out"
-            size="icon"
-          >
-            <LogOut size={14} />
-          </Button>
-        </div>
-      </div>
+      <SidebarUserFooter variant="dark" />
     </aside>
   );
 }

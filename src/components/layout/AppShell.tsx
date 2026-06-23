@@ -2,7 +2,9 @@
 
 import { usePathname } from "next/navigation";
 import type { Team } from "@/lib/sidebar/types";
+import { cn } from "@/lib/utils";
 import Sidebar from "./Sidebar";
+import { SidebarSlotProvider, useSidebarSlot } from "./sidebar-slot";
 import Topbar from "./Topbar";
 import { TeamProvider, useTeamContext } from "./team-context";
 
@@ -19,9 +21,11 @@ type AppShellProps = {
 };
 
 // We split this into an inner component so we can use the useTeamContext hook
-function AppShellInner({ user, children, hideSidebar }: Omit<AppShellProps, "teams">) {
+function AppShellInner({ children, hideSidebar }: Pick<AppShellProps, "children" | "hideSidebar">) {
   const pathname = usePathname();
   const { activeTeam } = useTeamContext();
+  const { sidebar: slotSidebar } = useSidebarSlot();
+  const leftSidebar = slotSidebar ?? (!hideSidebar ? <Sidebar /> : null);
 
   // Find the active page title
   let activePageName = "Dashboard";
@@ -55,11 +59,13 @@ function AppShellInner({ user, children, hideSidebar }: Omit<AppShellProps, "tea
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      {!hideSidebar && <Sidebar user={user} />}
+      {leftSidebar}
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <Topbar appName={activeTeam?.name ?? "Super Portal"} pageName={activePageName} />
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <main className={cn("flex-1", slotSidebar ? "overflow-hidden" : "overflow-y-auto")}>
+          {children}
+        </main>
       </div>
     </div>
   );
@@ -67,10 +73,10 @@ function AppShellInner({ user, children, hideSidebar }: Omit<AppShellProps, "tea
 
 export default function AppShell(props: AppShellProps) {
   return (
-    <TeamProvider teams={props.teams}>
-      <AppShellInner user={props.user} hideSidebar={props.hideSidebar}>
-        {props.children}
-      </AppShellInner>
+    <TeamProvider teams={props.teams ?? []}>
+      <SidebarSlotProvider>
+        <AppShellInner hideSidebar={props.hideSidebar}>{props.children}</AppShellInner>
+      </SidebarSlotProvider>
     </TeamProvider>
   );
 }

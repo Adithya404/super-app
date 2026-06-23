@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { Team } from "@/lib/sidebar/types";
-import { getFirstAccessiblePath } from "@/lib/teams";
+import { getSwitcherTeams, getTeamLandingUrl } from "@/lib/teams";
 
 export function TeamSwitcher({
   teams,
@@ -23,6 +23,8 @@ export function TeamSwitcher({
   activeTeam: Team;
   setActiveTeam: (team: Team) => void;
 }) {
+  const availableTeams = React.useMemo(() => getSwitcherTeams(teams), [teams]);
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -43,8 +45,8 @@ export function TeamSwitcher({
         <DropdownMenuLabel className="text-muted-foreground text-xs">
           Applications
         </DropdownMenuLabel>
-        {teams.map((team) => (
-          <TeamSwitcherItem key={team.name} team={team} setActiveTeam={setActiveTeam} />
+        {availableTeams.map((team) => (
+          <TeamSwitcherItem key={team.teamPath} team={team} setActiveTeam={setActiveTeam} />
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
@@ -60,8 +62,11 @@ function TeamSwitcherItem({
 }) {
   const [isPending, startTransition] = React.useTransition();
   const router = useRouter();
+  const url = getTeamLandingUrl(team);
 
-  const url = getFirstAccessiblePath([team]) || team.teamPath;
+  if (!url) {
+    return null;
+  }
 
   return (
     <DropdownMenuItem

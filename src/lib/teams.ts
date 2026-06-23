@@ -3,9 +3,44 @@
 // Filters the full app registry by user roles, producing a client-safe
 // Team[] that only contains pages the user is authorized to see.
 
-import type { AppPage } from "@/components/layout/apps";
+import type { AppConfig, AppPage } from "@/components/layout/apps";
 import { apps } from "@/components/layout/apps/registry";
+import type { UserRoleWithApp } from "@/lib/roles";
 import type { ModuleMenuItems, PageGroup, PageItem, Team } from "@/lib/sidebar/types";
+
+const APP_WILDCARDS = new Set(["*", "super-app"]);
+
+function collectRoleCodesFromApp(app: AppConfig): string[] {
+  const codes = new Set<string>();
+
+  for (const mod of app.modules) {
+    for (const group of mod.pageGroups) {
+      for (const page of group.pages) {
+        for (const role of page.roles) {
+          codes.add(role);
+        }
+      }
+    }
+  }
+
+  for (const nav of app.oneLevelNav ?? []) {
+    for (const role of nav.roles) {
+      codes.add(role);
+    }
+  }
+
+  return [...codes];
+}
+
+function userHasAppAccess(userRoles: UserRoleWithApp[], app: AppConfig): boolean {
+  const roleCodes = userRoles.map((role) => role.roleCode);
+
+  if (userRoles.some((role) => role.app === app.key || APP_WILDCARDS.has(role.app))) {
+    return true;
+  }
+
+  return collectRoleCodesFromApp(app).some((code) => roleCodes.includes(code));
+}
 
 /**
  * Converts an AppPage (with roles) into a client-safe PageItem (without roles).
@@ -30,10 +65,14 @@ function toPageItem(page: AppPage): PageItem {
  * - A module is included only if it has at least one non-empty page group.
  * - An app becomes a team only if it has at least one accessible page.
  */
-export function resolveTeamsForUser(roles: string[]): Team[] {
+export function resolveTeamsForUser(userRoles: UserRoleWithApp[]): Team[] {
+  const roleCodes = userRoles.map((role) => role.roleCode);
   const teams: Team[] = [];
 
   for (const app of apps) {
+    if (!userHasAppAccess(userRoles, app)) {
+      continue;
+    }
     const filteredModules: ModuleMenuItems[] = [];
 
     for (const mod of app.modules) {
@@ -42,7 +81,8 @@ export function resolveTeamsForUser(roles: string[]): Team[] {
       for (const group of mod.pageGroups) {
         const filteredPages = group.pages.filter(
           (page) =>
-            !page.hidden && (page.roles.length === 0 || page.roles.some((r) => roles.includes(r))),
+            !page.hidden &&
+            (page.roles.length === 0 || page.roles.some((r) => roleCodes.includes(r))),
         );
 
         if (filteredPages.length > 0) {
@@ -69,7 +109,8 @@ export function resolveTeamsForUser(roles: string[]): Team[] {
     const filteredOneLevelNav: PageItem[] = (app.oneLevelNav ?? [])
       .filter(
         (page) =>
-          !page.hidden && (page.roles.length === 0 || page.roles.some((r) => roles.includes(r))),
+          !page.hidden &&
+          (page.roles.length === 0 || page.roles.some((r) => roleCodes.includes(r))),
       )
       .map(toPageItem);
 
@@ -86,6 +127,42 @@ export function resolveTeamsForUser(roles: string[]): Team[] {
   }
 
   return teams;
+}
+
+/**
+ * Registry entries for teams the user can access (for switcher display metadata).
+ */
+export function getAppConfigsForTeams(teams: Team[]): AppConfig[] {
+  const teamPaths = new Set(teams.map((team) => team.teamPath));
+  return apps.filter((app) => teamPaths.has(app.basePath));
+}
+
+/**
+ * First navigable URL for a team, or null if none.
+ */
+export function getTeamLandingUrl(team: Team): string | null {
+  const visibleNav = team.oneLevelNav.find((nav) => !nav.hidden);
+  if (visibleNav) {
+    return `${team.teamPath}${visibleNav.pagePath}`;
+  }
+
+  for (const mod of team.modules) {
+    for (const group of mod.pageGroups) {
+      const page = group.pages.find((p) => !p.hidden);
+      if (page) {
+        return `${mod.modulePath}${group.groupPath}${page.pagePath}`;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Teams that have at least one navigable page for the app switcher.
+ */
+export function getSwitcherTeams(teams: Team[]): Team[] {
+  return teams.filter((team) => getTeamLandingUrl(team) !== null);
 }
 
 /**

@@ -23,7 +23,7 @@ export default function SecureLayout({ children }: { children: React.ReactNode }
   const hideSidebar = pathname.startsWith("/pp");
 
   return (
-    <AppShell teams={session.user.teams} user={session.user} hideSidebar={hideSidebar}>
+    <AppShell teams={session.user.teams ?? []} user={session.user} hideSidebar={hideSidebar}>
       {children}
     </AppShell>
   );

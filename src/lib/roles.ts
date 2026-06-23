@@ -2,20 +2,33 @@ import { authPool } from "@/lib/db";
 
 export type UserRole = string;
 
-export async function getUserRoles(email: string): Promise<UserRole[]> {
-  const { rows } = await authPool.query(
-    `SELECT r.role_code
+export type UserRoleWithApp = {
+  roleCode: string;
+  app: string;
+};
+
+const ACTIVE_ROLE_FILTER = `
+  AND (ur.end_date IS NULL OR ur.end_date > CURRENT_DATE)
+  AND (r.end_date  IS NULL OR r.end_date  > CURRENT_DATE)
+  AND ur.start_date <= CURRENT_DATE
+  AND r.start_date  <= CURRENT_DATE
+`;
+
+export async function getUserRolesWithApp(email: string): Promise<UserRoleWithApp[]> {
+  const { rows } = await authPool.query<{ role_code: string; app: string }>(
+    `SELECT r.role_code, r.app
      FROM "super".user_roles ur
      JOIN "super".roles r ON r.role_code = ur.role_code
      WHERE ur.email = $1
-       AND (ur.end_date IS NULL OR ur.end_date > CURRENT_DATE)
-       AND (r.end_date  IS NULL OR r.end_date  > CURRENT_DATE)
-       AND ur.start_date <= CURRENT_DATE
-       AND r.start_date  <= CURRENT_DATE`,
+       ${ACTIVE_ROLE_FILTER}`,
     [email],
   );
-  const roles = rows.map((role) => role.role_code);
-  return roles;
+  return rows.map((role) => ({ roleCode: role.role_code, app: role.app }));
+}
+
+export async function getUserRoles(email: string): Promise<UserRole[]> {
+  const roles = await getUserRolesWithApp(email);
+  return roles.map((role) => role.roleCode);
 }
 
 export async function getUserRolesForApp(email: string, app: string): Promise<string[]> {
