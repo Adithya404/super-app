@@ -1,7 +1,6 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,50 +18,56 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatDateOnly } from "@/lib/common/date";
-import { F, type Filters } from "@/lib/common/ds/filters";
+import { formatDateOnly, parseDateLocal, toDateInputValue } from "@/lib/common/date";
 import type { Roles } from "@/lib/common/ds/types/admin/Roles";
 import type { UserRoles } from "@/lib/common/ds/types/admin/UserRoles";
 import type { Users } from "@/lib/common/ds/types/admin/Users";
+import {
+  type Row,
+  type Store,
+  useDBRows,
+  useIsStoreDirty,
+  useIsStoreLoading,
+  useIsStorePosting,
+  useRows,
+  useStore,
+} from "@/lib/common/store";
 
 function isRoleActive(endDate?: Date | string | null) {
-  if (!endDate) return true;
+  if (endDate == null || endDate === "") return true;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const end = endDate instanceof Date ? endDate : new Date(endDate);
+  if (Number.isNaN(end.getTime())) return true;
   end.setHours(0, 0, 0, 0);
   return end >= today;
 }
 
-function formatDate(value?: Date | string | null) {
-  return formatDateOnly(value);
+function todayInputValue() {
+  return toDateInputValue(new Date());
 }
 
-async function fetchDatasource<T extends object>(datasourceId: string, filters: Filters<T> = []) {
-  const queryParams = new URLSearchParams({
-    limit: "200",
-    offset: "0",
-    includeCount: "false",
-    filters: JSON.stringify(filters),
+function useAssignUserRolesStore(email: string) {
+  return useStore<UserRoles>({
+    datasourceId: "UserRoles",
+    page: "assign-roles",
+    alias: `assign-roles-${email}`,
+    limit: 200,
+    includeCount: false,
+    autoQuery: false,
+    defaultMatch: email ? { email } : undefined,
   });
-  const response = await fetch(`/api/ds/${datasourceId}?${queryParams.toString()}`);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch ${datasourceId}`);
-  }
-  const data = await response.json();
-  return (data.rows ?? []) as T[];
 }
 
-async function saveUserRoles(rows: Record<string, unknown>[]) {
-  const response = await fetch("/api/ds/UserRoles", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ rows }),
+function useRolesLookupStore() {
+  return useStore<Roles>({
+    datasourceId: "Roles",
+    page: "assign-roles",
+    alias: "roles-lookup",
+    limit: 500,
+    includeCount: false,
+    autoQuery: false,
   });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.message || "Failed to save user roles");
-  }
 }
 
 interface AssignRolesDialogProps {
@@ -72,98 +77,130 @@ interface AssignRolesDialogProps {
 }
 
 export function AssignRolesDialog({ user, open, onOpenChange }: AssignRolesDialogProps) {
-  const queryClient = useQueryClient();
-  const [selectedRoleCode, setSelectedRoleCode] = useState("");
-  const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0]);
+  const email = (user.email ?? "").toLowerCase().trim();
+  const userRolesStore = useAssignUserRolesStore(email);
+  const rolesStore = useRolesLookupStore();
+
+  const userRoles = useRows(userRolesStore);
+  const allRoles = useDBRows(rolesStore);
+  const loadingUserRoles = useIsStoreLoading(userRolesStore);
+  const loadingRoles = useIsStoreLoading(rolesStore);
+  const isDirty = useIsStoreDirty(userRolesStore);
+  const isPosting = useIsStorePosting(userRolesStore);
+
+  const [selectedRoleCode, setSelectedRoleCode] = useState<string | undefined>(undefined);
+  const [startDate, setStartDate] = useState(todayInputValue());
   const [endDateByRole, setEndDateByRole] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const email = user.email ?? "";
-
-  const { data: userRoles = [], isLoading: loadingUserRoles } = useQuery({
-    queryKey: ["user-roles", email],
-    queryFn: () => fetchDatasource<UserRoles>("UserRoles", [F.text("email", "is", email)]),
-    enabled: open && !!email,
-  });
-
-  const { data: allRoles = [], isLoading: loadingRoles } = useQuery({
-    queryKey: ["roles-all"],
-    queryFn: () => fetchDatasource<Roles>("Roles"),
-    enabled: open,
-  });
-
-  const activeUserRoles = userRoles.filter((ur) => isRoleActive(ur.endDate));
-  const activeRoleCodes = new Set(activeUserRoles.map((ur) => ur.roleCode));
-
-  const availableRoles = allRoles.filter(
-    (role) => isRoleActive(role.endDate) && !activeRoleCodes.has(role.roleCode) && role.roleCode,
-  );
-
-  const roleNameByCode = Object.fromEntries(allRoles.map((r) => [r.roleCode, r.role]));
-
-  const handleEndRole = async (userRole: UserRoles) => {
-    if (!email) return;
-    const endDate = endDateByRole[userRole.roleCode] || new Date().toISOString().split("T")[0];
-    setSaving(true);
+  // Load stores when dialog opens (core pattern: autoQuery false + executeQuery)
+  useEffect(() => {
+    if (!open || !email) return;
     setError(null);
-    try {
-      await saveUserRoles([
-        {
-          email,
-          roleCode: userRole.roleCode,
-          endDate,
-          _status: "U",
-          _orig: { email, roleCode: userRole.roleCode },
-        },
-      ]);
-      await queryClient.invalidateQueries({ queryKey: ["user-roles", email] });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to end role");
-    } finally {
-      setSaving(false);
-    }
+    setSelectedRoleCode(undefined);
+    setStartDate(todayInputValue());
+    setEndDateByRole({});
+    void userRolesStore.executeQuery?.({
+      query: { match: { email }, limit: 200 },
+      force: true,
+    });
+    void rolesStore.executeQuery?.({
+      query: { limit: 500 },
+      force: true,
+    });
+  }, [open, email, userRolesStore, rolesStore]);
+
+  const activeRoleCodes = useMemo(() => {
+    return new Set(
+      userRoles
+        .filter((ur) => isRoleActive(ur.endDate))
+        .map((ur) => ur.roleCode)
+        .filter(Boolean),
+    );
+  }, [userRoles]);
+
+  const availableRoles = useMemo(() => {
+    return allRoles.filter(
+      (role) =>
+        Boolean(role.roleCode) && isRoleActive(role.endDate) && !activeRoleCodes.has(role.roleCode),
+    );
+  }, [allRoles, activeRoleCodes]);
+
+  const roleNameByCode = useMemo(() => {
+    return Object.fromEntries(allRoles.map((r) => [r.roleCode, r.role]));
+  }, [allRoles]);
+
+  const handleClose = () => {
+    userRolesStore.resetStore?.();
+    onOpenChange(false);
   };
 
-  const handleAssignRole = async () => {
-    if (!email || !selectedRoleCode) return;
-    const existingRole = userRoles.find((ur) => ur.roleCode === selectedRoleCode);
-    setSaving(true);
+  const handleSave = async () => {
     setError(null);
-    try {
-      if (existingRole) {
-        await saveUserRoles([
-          {
-            email,
-            roleCode: selectedRoleCode,
-            startDate,
-            endDate: null,
-            _status: "U",
-            _orig: { email, roleCode: selectedRoleCode },
-          },
-        ]);
-      } else {
-        await saveUserRoles([
-          {
-            email,
-            roleCode: selectedRoleCode,
-            startDate,
-            _status: "I",
-          },
-        ]);
-      }
-      setSelectedRoleCode("");
-      setStartDate(new Date().toISOString().split("T")[0]);
-      await queryClient.invalidateQueries({ queryKey: ["user-roles", email] });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to assign role");
-    } finally {
-      setSaving(false);
+    const ok = await userRolesStore.save({ feedback: "Roles updated" });
+    if (!ok) {
+      setError(userRolesStore.error ?? "Failed to save roles");
+      return;
     }
+    onOpenChange(false);
+  };
+
+  const handleEndRole = (userRole: Row<UserRoles>) => {
+    const rowId = userRolesStore.rowId?.(userRole);
+    if (!rowId) return;
+    const endDate = endDateByRole[userRole.roleCode] ?? todayInputValue();
+    userRolesStore.setValue(
+      "endDate",
+      parseDateLocal(endDate) as unknown as UserRoles["endDate"],
+      rowId,
+    );
+  };
+
+  const handleAssignRole = () => {
+    if (!email || !selectedRoleCode) return;
+    setError(null);
+
+    const existing = userRoles.find((ur) => ur.roleCode === selectedRoleCode);
+    if (existing && isRoleActive(existing.endDate)) {
+      setError("That role is already active for this user.");
+      return;
+    }
+
+    if (existing) {
+      // Reactivate ended role (same composite PK → update)
+      const rowId = userRolesStore.rowId?.(existing);
+      if (!rowId) return;
+      userRolesStore.setValue(
+        "startDate",
+        parseDateLocal(startDate) as unknown as UserRoles["startDate"],
+        rowId,
+      );
+      userRolesStore.setValue("endDate", null, rowId);
+    } else {
+      // Core pattern: insert pending row into store, save later
+      userRolesStore.createNew({
+        partialRecord: {
+          email,
+          roleCode: selectedRoleCode,
+          startDate: parseDateLocal(startDate),
+          endDate: null,
+          roleName: roleNameByCode[selectedRoleCode],
+        },
+      });
+    }
+
+    setSelectedRoleCode(undefined);
+    setStartDate(todayInputValue());
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) handleClose();
+        else onOpenChange(next);
+      }}
+    >
       <DialogContent className="sm:max-w-lg md:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Manage Roles — {user.name || user.email}</DialogTitle>
@@ -176,69 +213,16 @@ export function AssignRolesDialog({ user, open, onOpenChange }: AssignRolesDialo
             </p>
           )}
 
-          <section className="space-y-3">
-            <h3 className="font-medium text-sm">Current Roles</h3>
-            {loadingUserRoles ? (
-              <p className="text-muted-foreground text-sm">Loading roles...</p>
-            ) : userRoles.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No roles assigned.</p>
-            ) : (
-              <div className="space-y-2">
-                {userRoles.map((userRole) => {
-                  const active = isRoleActive(userRole.endDate);
-                  return (
-                    <div
-                      key={`${userRole.email}-${userRole.roleCode}`}
-                      className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-end sm:justify-between"
-                    >
-                      <div className="space-y-1">
-                        <p className="font-medium text-sm">
-                          {roleNameByCode[userRole.roleCode] || userRole.roleCode}
-                        </p>
-                        <p className="text-muted-foreground text-xs">
-                          {userRole.roleCode} · Start: {formatDate(userRole.startDate)} · End:{" "}
-                          {formatDate(userRole.endDate)}
-                          {active ? " · Active" : " · Ended"}
-                        </p>
-                      </div>
-                      {active && (
-                        <div className="flex items-end gap-2">
-                          <div className="grid gap-1">
-                            <Label htmlFor={`end-${userRole.roleCode}`} className="text-xs">
-                              End Date
-                            </Label>
-                            <Input
-                              id={`end-${userRole.roleCode}`}
-                              type="date"
-                              className="h-8"
-                              value={
-                                endDateByRole[userRole.roleCode] ??
-                                new Date().toISOString().split("T")[0]
-                              }
-                              onChange={(e) =>
-                                setEndDateByRole((prev) => ({
-                                  ...prev,
-                                  [userRole.roleCode]: e.target.value,
-                                }))
-                              }
-                            />
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={saving}
-                            onClick={() => handleEndRole(userRole)}
-                          >
-                            End Role
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
+          <CurrentRolesSection
+            store={userRolesStore}
+            userRoles={userRoles}
+            loading={loadingUserRoles}
+            roleNameByCode={roleNameByCode}
+            endDateByRole={endDateByRole}
+            setEndDateByRole={setEndDateByRole}
+            onEndRole={handleEndRole}
+            disabled={isPosting}
+          />
 
           <section className="space-y-3 border-t pt-4">
             <h3 className="font-medium text-sm">Assign New Role</h3>
@@ -250,13 +234,16 @@ export function AssignRolesDialog({ user, open, onOpenChange }: AssignRolesDialo
               </p>
             ) : (
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                <div className="grid flex-1 gap-2">
+                <div className="grid min-w-0 flex-1 gap-2">
                   <Label htmlFor="role-select">Role</Label>
-                  <Select value={selectedRoleCode} onValueChange={setSelectedRoleCode}>
+                  <Select
+                    value={selectedRoleCode}
+                    onValueChange={(value) => setSelectedRoleCode(value || undefined)}
+                  >
                     <SelectTrigger id="role-select" className="w-full">
                       <SelectValue placeholder="Select a role" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper" className="z-60">
                       {availableRoles.map((role) => (
                         <SelectItem key={role.roleCode} value={role.roleCode}>
                           {role.role} ({role.roleCode})
@@ -276,7 +263,7 @@ export function AssignRolesDialog({ user, open, onOpenChange }: AssignRolesDialo
                   />
                 </div>
                 <Button
-                  disabled={!selectedRoleCode || saving}
+                  disabled={!selectedRoleCode || isPosting}
                   onClick={handleAssignRole}
                   className="sm:mb-0.5"
                 >
@@ -284,15 +271,132 @@ export function AssignRolesDialog({ user, open, onOpenChange }: AssignRolesDialo
                 </Button>
               </div>
             )}
+            <p className="text-muted-foreground text-xs">
+              Assignments and end dates are pending until you click Save.
+            </p>
           </section>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
+        <DialogFooter className="gap-2 sm:justify-between">
+          <div className="text-muted-foreground text-xs">
+            {isDirty ? "You have unsaved role changes." : null}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleClose} disabled={isPosting}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={isPosting || !isDirty}>
+              {isPosting ? "Saving…" : "Save"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function CurrentRolesSection({
+  store,
+  userRoles,
+  loading,
+  roleNameByCode,
+  endDateByRole,
+  setEndDateByRole,
+  onEndRole,
+  disabled,
+}: {
+  store: Store<UserRoles>;
+  userRoles: Row<UserRoles>[];
+  loading: boolean;
+  roleNameByCode: Record<string, string>;
+  endDateByRole: Record<string, string>;
+  setEndDateByRole: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  onEndRole: (userRole: Row<UserRoles>) => void;
+  disabled: boolean;
+}) {
+  return (
+    <section className="space-y-3">
+      <h3 className="font-medium text-sm">Current Roles</h3>
+      {loading ? (
+        <p className="text-muted-foreground text-sm">Loading roles...</p>
+      ) : userRoles.length === 0 ? (
+        <p className="text-muted-foreground text-sm">No roles assigned.</p>
+      ) : (
+        <div className="space-y-2">
+          {userRoles.map((userRole) => {
+            const rowId = store.rowId?.(userRole) ?? `${userRole.email}-${userRole.roleCode}`;
+            const active = isRoleActive(userRole.endDate);
+            const pending = userRole._status === "I" || userRole._status === "U";
+            const displayName =
+              userRole.roleName || roleNameByCode[userRole.roleCode] || userRole.roleCode;
+
+            return (
+              <div
+                key={rowId}
+                className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-end sm:justify-between"
+              >
+                <div className="space-y-1">
+                  <p className="font-medium text-sm">
+                    {displayName}
+                    {pending ? (
+                      <span className="ml-2 text-amber-600 text-xs dark:text-amber-400">
+                        (unsaved)
+                      </span>
+                    ) : null}
+                  </p>
+                  <p className="text-muted-foreground text-xs">
+                    {userRole.roleCode} · Start: {formatDateOnly(userRole.startDate)} · End:{" "}
+                    {formatDateOnly(userRole.endDate)}
+                    {active ? " · Active" : " · Ended"}
+                  </p>
+                </div>
+                {active && userRole._status !== "I" && (
+                  <div className="flex items-end gap-2">
+                    <div className="grid gap-1">
+                      <Label htmlFor={`end-${rowId}`} className="text-xs">
+                        End Date
+                      </Label>
+                      <Input
+                        id={`end-${rowId}`}
+                        type="date"
+                        className="h-8"
+                        value={endDateByRole[userRole.roleCode] ?? todayInputValue()}
+                        onChange={(e) =>
+                          setEndDateByRole((prev) => ({
+                            ...prev,
+                            [userRole.roleCode]: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={disabled}
+                      onClick={() => onEndRole(userRole)}
+                    >
+                      End Role
+                    </Button>
+                  </div>
+                )}
+                {userRole._status === "I" && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={disabled}
+                    onClick={() => {
+                      const id = store.rowId?.(userRole);
+                      if (id) void store.deleteRow?.(id);
+                    }}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }

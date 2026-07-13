@@ -21,6 +21,17 @@ function isEmptyObject(obj: Record<string, unknown>): boolean {
   return Object.keys(obj).length === 0;
 }
 
+function resolveStableRowId(row: Record<string, unknown>): string {
+  if (typeof row._cid === "string" && row._cid) return row._cid;
+  if (typeof row._id === "string" && row._id) return row._id;
+  if (row.id != null && row.id !== "") return String(row.id);
+  // Composite PK used by UserRoles (email + roleCode)
+  if (row.email != null && row.roleCode != null) {
+    return `${String(row.email)}::${String(row.roleCode)}`;
+  }
+  return crypto.randomUUID();
+}
+
 type ChildStoreEntry = {
   config: { store: Store<object> };
 };
@@ -287,9 +298,7 @@ export class DataStore<T extends object = any> implements Store<T> {
         handleResponse(rows);
       } else {
         this._state.dbRows = rows.map((row) => {
-          const id =
-            (row as Row<T>)._id ??
-            String((row as Record<string, unknown>).id ?? crypto.randomUUID());
+          const id = resolveStableRowId(row as Record<string, unknown>);
           return { ...row, _id: id, _status: "Q" as const } as Row<T>;
         });
         this._state.count = result.count ?? 0;
@@ -385,7 +394,10 @@ export class DataStore<T extends object = any> implements Store<T> {
     if (!this._state.originalRows[idKey]) {
       this._state.originalRows = { ...this._state.originalRows, [idKey]: { ...dbRow } };
     }
-    const edited = apply(dbRow);
+    const edited = {
+      ...apply(dbRow),
+      _orig: this._state.originalRows[idKey] ?? { ...dbRow },
+    } as Row<T>;
     this._state.localRows = [edited, ...this._state.localRows];
     this._state.dbRows = this._state.dbRows.filter((row) => this.rowId(row) !== id);
     this._state.currentRowId = this.rowId(edited);
@@ -454,7 +466,14 @@ export class DataStore<T extends object = any> implements Store<T> {
   };
 
   save = async (params?: { silent?: boolean; feedback?: "NONE" | string }): Promise<boolean> => {
-    const dirtyRecords = this.dirtyRows();
+    const dirtyRecords = this.dirtyRows().map((row) => {
+      const id = this.rowId(row);
+      const orig = this._state.originalRows[id];
+      if (row._status === "U" && orig && !row._orig) {
+        return { ...row, _orig: orig };
+      }
+      return row;
+    });
     if (dirtyRecords.length === 0) {
       return true;
     }
@@ -469,7 +488,12 @@ export class DataStore<T extends object = any> implements Store<T> {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to save data");
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(
+          typeof errData === "object" && errData && "message" in errData
+            ? String((errData as { message: string }).message)
+            : "Failed to save data",
+        );
       }
 
       this.resetStore();

@@ -1,4 +1,4 @@
-import { DefaultAttribute, DefaultDataSource } from "../../defaults";
+import { DefaultAttribute, DefaultCalculatedAttribute, DefaultDataSource } from "../../defaults";
 import type { DataSource } from "../../types";
 
 export const UserRolesDS: DataSource = {
@@ -24,6 +24,13 @@ export const UserRolesDS: DataSource = {
       column: "role_code",
       primary: true,
       optional: false,
+    },
+    {
+      ...DefaultCalculatedAttribute,
+      code: "roleName",
+      name: "Role Name",
+      type: "Text",
+      column: "(SELECT r.role FROM super.roles r WHERE r.role_code = x.role_code LIMIT 1)",
     },
     {
       ...DefaultAttribute,

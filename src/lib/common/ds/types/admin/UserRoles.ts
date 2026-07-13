@@ -1,7 +1,9 @@
 export interface UserRoles {
   email: string;
   roleCode: string;
-  startDate: Date;
-  endDate?: Date;
-  createdAt?: Date;
+  /** Joined from roles.role when available */
+  roleName?: string;
+  startDate: Date | string;
+  endDate?: Date | string | null;
+  createdAt?: Date | string;
 }
