@@ -151,7 +151,7 @@ export default function DMPage() {
     <>
       {!roomId ? (
         <EmptyState
-          icon={<MessageCircle size={40} className="text-muted-foreground/40" />}
+          icon={<MessageCircle size={40} className="text-cyan-300/70" />}
           title="Your Direct Messages"
           description="Select a conversation or start a new one"
         />

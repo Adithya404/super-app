@@ -15,6 +15,8 @@ import { stopIncomingCallRingtone } from "@/lib/pingpal/call-audio";
 import { createPeerConnection } from "@/lib/webrtc/config";
 
 export const CALL_RING_TIMEOUT_MS = 30_000;
+/** Grace period before hanging up on transient ICE `disconnected`. */
+const ICE_DISCONNECT_GRACE_MS = 8_000;
 
 export type CallType = "audio" | "video";
 export type CallStatus = "idle" | "outgoing" | "incoming" | "connected" | "ended";
@@ -75,6 +77,13 @@ async function attachStream(peer: RTCPeerConnection, stream: MediaStream) {
   }
 }
 
+function toSessionDescription(
+  desc: RTCSessionDescriptionInit | RTCSessionDescription | null | undefined,
+): RTCSessionDescriptionInit | null {
+  if (!desc?.type || !desc.sdp) return null;
+  return { type: desc.type, sdp: desc.sdp };
+}
+
 export function CallProvider({ children }: { children: ReactNode }) {
   const { send, subscribe } = usePingPalWS();
   const [call, setCall] = useState<CallState>(initialCallState);
@@ -83,7 +92,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const callRef = useRef(call);
   const pendingOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
   const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+  const remoteDescriptionSetRef = useRef(false);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
   const ringTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const disconnectGraceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     callRef.current = call;
@@ -96,10 +108,20 @@ export function CallProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const clearDisconnectGrace = useCallback(() => {
+    if (disconnectGraceRef.current) {
+      clearTimeout(disconnectGraceRef.current);
+      disconnectGraceRef.current = null;
+    }
+  }, []);
+
   const cleanupPeer = useCallback(() => {
+    clearDisconnectGrace();
     peerRef.current?.close();
     peerRef.current = null;
-  }, []);
+    remoteDescriptionSetRef.current = false;
+    remoteStreamRef.current = null;
+  }, [clearDisconnectGrace]);
 
   const stopLocalStream = useCallback((stream: MediaStream | null) => {
     if (!stream) return;
@@ -131,9 +153,55 @@ export function CallProvider({ children }: { children: ReactNode }) {
     resetCall();
   }, [resetCall, send]);
 
+  const flushPendingIceCandidates = useCallback(async (peer: RTCPeerConnection) => {
+    while (pendingIceCandidatesRef.current.length > 0) {
+      const candidate = pendingIceCandidatesRef.current.shift();
+      if (!candidate) break;
+      try {
+        await peer.addIceCandidate(candidate);
+      } catch {
+        // Ignore stale / duplicate candidates.
+      }
+    }
+  }, []);
+
+  const applyRemoteDescription = useCallback(
+    async (peer: RTCPeerConnection, description: RTCSessionDescriptionInit) => {
+      await peer.setRemoteDescription(description);
+      remoteDescriptionSetRef.current = true;
+      await flushPendingIceCandidates(peer);
+    },
+    [flushPendingIceCandidates],
+  );
+
+  const addRemoteIceCandidate = useCallback(
+    async (candidate: RTCIceCandidateInit) => {
+      const peer = peerRef.current;
+      if (!peer || !remoteDescriptionSetRef.current) {
+        pendingIceCandidatesRef.current.push(candidate);
+        // Remote description may have been applied between the check and push.
+        if (peerRef.current && remoteDescriptionSetRef.current) {
+          await flushPendingIceCandidates(peerRef.current);
+        }
+        return;
+      }
+      try {
+        await peer.addIceCandidate(candidate);
+      } catch {
+        // ICE candidates can arrive after negotiation; ignore stale ones.
+      }
+    },
+    [flushPendingIceCandidates],
+  );
+
   const setupPeer = useCallback(
     (remoteUserId: string, callId: string) => {
       cleanupPeer();
+      // Do not clear pendingIceCandidatesRef here — the callee may already have
+      // buffered the caller's trickle-ICE candidates before accept().
+      remoteDescriptionSetRef.current = false;
+      remoteStreamRef.current = null;
+
       const peer = createPeerConnection();
       peerRef.current = peer;
 
@@ -149,7 +217,17 @@ export function CallProvider({ children }: { children: ReactNode }) {
       };
 
       peer.ontrack = (ev) => {
-        const stream = ev.streams[0] ?? new MediaStream([ev.track]);
+        // Accumulate onto a local MediaStream so audio + video tracks are never
+        // overwritten when browsers fire ontrack once per track.
+        let stream = remoteStreamRef.current;
+        if (!stream) {
+          stream = new MediaStream();
+          remoteStreamRef.current = stream;
+        }
+        if (!stream.getTracks().includes(ev.track)) {
+          stream.addTrack(ev.track);
+        }
+
         setCall((prev) => ({
           ...prev,
           remoteStream: stream,
@@ -159,14 +237,30 @@ export function CallProvider({ children }: { children: ReactNode }) {
       };
 
       peer.onconnectionstatechange = () => {
-        if (peer.connectionState === "failed" || peer.connectionState === "disconnected") {
+        const state = peer.connectionState;
+        if (state === "connected") {
+          clearDisconnectGrace();
+          return;
+        }
+        if (state === "failed") {
+          clearDisconnectGrace();
           endCall();
+          return;
+        }
+        // `disconnected` is often transient during ICE; only hang up if it sticks.
+        if (state === "disconnected") {
+          clearDisconnectGrace();
+          disconnectGraceRef.current = setTimeout(() => {
+            if (peerRef.current === peer && peer.connectionState !== "connected") {
+              endCall();
+            }
+          }, ICE_DISCONNECT_GRACE_MS);
         }
       };
 
       return peer;
     },
-    [cleanupPeer, endCall, send],
+    [cleanupPeer, clearDisconnectGrace, endCall, send],
   );
 
   const getMediaStream = useCallback(async (callType: CallType) => {
@@ -210,6 +304,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
+      const localOffer = toSessionDescription(peer.localDescription) ?? offer;
 
       setCall({
         status: "outgoing",
@@ -230,7 +325,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         toUserId,
         roomId,
         callId,
-        offer,
+        offer: localOffer,
         callType,
       });
     },
@@ -244,6 +339,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    clearRingTimeout();
+    stopIncomingCallRingtone();
+
     const stream = await getMediaStream(current.callType);
     const peer = setupPeer(current.remoteUserId, current.callId);
     await attachStream(peer, stream);
@@ -251,18 +349,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
     if (peer.signalingState === "have-local-offer") {
       await peer.setLocalDescription({ type: "rollback" });
     }
-    await peer.setRemoteDescription(offer);
+    await applyRemoteDescription(peer, offer);
     const answer = await peer.createAnswer();
     await peer.setLocalDescription(answer);
-
-    for (const candidate of pendingIceCandidatesRef.current) {
-      try {
-        await peer.addIceCandidate(candidate);
-      } catch {
-        // ignore stale candidates
-      }
-    }
-    pendingIceCandidatesRef.current = [];
+    const localAnswer = toSessionDescription(peer.localDescription) ?? answer;
 
     setCall((prev) => ({
       ...prev,
@@ -276,11 +366,11 @@ export function CallProvider({ children }: { children: ReactNode }) {
       type: "call_accepted",
       toUserId: current.remoteUserId,
       callId: current.callId,
-      answer,
+      answer: localAnswer,
     });
 
     pendingOfferRef.current = null;
-  }, [getMediaStream, send, setupPeer]);
+  }, [applyRemoteDescription, clearRingTimeout, getMediaStream, send, setupPeer]);
 
   const rejectCall = useCallback(() => {
     const current = callRef.current;
@@ -330,7 +420,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
             return;
           }
 
-          pendingOfferRef.current = msg.offer;
+          pendingOfferRef.current = toSessionDescription(msg.offer) ?? msg.offer;
           const remoteUserName = await resolveRemoteName(msg.fromUserId);
 
           setCall({
@@ -354,9 +444,11 @@ export function CallProvider({ children }: { children: ReactNode }) {
           if (current.callId !== msg.callId || current.status !== "outgoing") return;
 
           const peer = peerRef.current;
-          if (!peer || peer.signalingState !== "have-local-offer") return;
+          const answer = toSessionDescription(msg.answer) ?? msg.answer;
+          if (!peer || !answer || peer.signalingState !== "have-local-offer") return;
 
-          await peer.setRemoteDescription(msg.answer);
+          clearRingTimeout();
+          await applyRemoteDescription(peer, answer);
           setCall((prev) => ({
             ...prev,
             status: "connected",
@@ -380,18 +472,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
         case "ice_candidate": {
           if (callRef.current.callId !== msg.callId || !msg.candidate) return;
-          const peer = peerRef.current;
-          if (!peer) {
-            if (callRef.current.status === "incoming") {
-              pendingIceCandidatesRef.current.push(msg.candidate);
-            }
-            return;
-          }
-          try {
-            await peer.addIceCandidate(msg.candidate);
-          } catch {
-            // ICE candidates can arrive after negotiation; ignore stale ones.
-          }
+          await addRemoteIceCandidate(msg.candidate);
           break;
         }
 
@@ -402,7 +483,14 @@ export function CallProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [resetCall, resolveRemoteName, send],
+    [
+      addRemoteIceCandidate,
+      applyRemoteDescription,
+      clearRingTimeout,
+      resetCall,
+      resolveRemoteName,
+      send,
+    ],
   );
 
   useEffect(() => {

@@ -4,6 +4,7 @@ import { LogOut, MoreVertical, Phone, Settings, UserPlus, Users, Video } from "l
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { Room } from "@/app/(secure)/pp/layout";
+import { roomGradient } from "@/components/pingpal/ChatSidebar";
 import { useCall } from "@/components/pingpal/call/call-context";
 import AddMembersDialog from "./AddMembersDialog";
 import GroupSettingsDialog from "./GroupSettingsDialog";
@@ -97,20 +98,28 @@ export default function RoomHeader({
 
   return (
     <>
-      <div className="relative flex h-14 shrink-0 items-center justify-between border-border border-b bg-background px-4">
+      <div className="pp-glass relative flex h-14 shrink-0 items-center justify-between border-white/10 border-b px-4">
         <div className="flex min-w-0 items-center gap-3">
           <div className="relative shrink-0">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 font-medium text-primary text-sm">
+            <div
+              className={`flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-br font-semibold text-sm text-white shadow-lg ${roomGradient(room.id)}`}
+            >
               {isGroup ? <Users size={16} /> : (displayName?.charAt(0) ?? "?").toUpperCase()}
             </div>
             {!isGroup && dmPartner?.is_online && (
-              <span className="absolute right-0 bottom-0 h-2.5 w-2.5 rounded-full bg-green-500 ring-2 ring-background" />
+              <span className="absolute right-0 bottom-0 h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)] ring-2 ring-[#0b0b26]" />
             )}
           </div>
 
           <div className="min-w-0">
-            <p className="truncate font-medium text-foreground text-sm">{displayName}</p>
-            <p className="text-[11px] text-muted-foreground">{subtitle}</p>
+            <p className="truncate font-semibold text-slate-100 text-sm">{displayName}</p>
+            <p
+              className={`text-[11px] ${
+                !isGroup && dmPartner?.is_online ? "text-emerald-300" : "text-slate-500"
+              }`}
+            >
+              {subtitle}
+            </p>
           </div>
         </div>
 
@@ -121,7 +130,7 @@ export default function RoomHeader({
                 type="button"
                 onClick={() => void handleStartCall("audio")}
                 disabled={call.status !== "idle" || startingCall !== null}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-white/10 hover:text-emerald-300 disabled:opacity-50"
                 title="Audio call"
               >
                 <Phone size={16} />
@@ -130,7 +139,7 @@ export default function RoomHeader({
                 type="button"
                 onClick={() => void handleStartCall("video")}
                 disabled={call.status !== "idle" || startingCall !== null}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-white/10 hover:text-cyan-300 disabled:opacity-50"
                 title="Video call"
               >
                 <Video size={16} />
@@ -142,7 +151,7 @@ export default function RoomHeader({
             <button
               type="button"
               onClick={() => setShowMembers((v) => !v)}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-white/10 hover:text-fuchsia-300"
               title="Members"
             >
               <Users size={16} />
@@ -153,13 +162,13 @@ export default function RoomHeader({
             <button
               type="button"
               onClick={() => setShowMenu((v) => !v)}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-white/10 hover:text-slate-100"
             >
               <MoreVertical size={16} />
             </button>
 
             {showMenu && (
-              <div className="absolute top-9 right-0 z-20 w-48 rounded-lg border border-border bg-background py-1 shadow-lg">
+              <div className="absolute top-9 right-0 z-20 w-48 rounded-xl border border-white/10 bg-[#12122e]/95 py-1 shadow-2xl shadow-black/50 backdrop-blur-xl">
                 {isGroup && isOwnerOrAdmin && (
                   <>
                     <button
@@ -168,9 +177,9 @@ export default function RoomHeader({
                         setShowMenu(false);
                         setShowAddMembers(true);
                       }}
-                      className="flex w-full items-center gap-2.5 px-3 py-2 text-foreground text-sm hover:bg-muted"
+                      className="flex w-full items-center gap-2.5 px-3 py-2 text-slate-200 text-sm hover:bg-white/10"
                     >
-                      <UserPlus size={14} className="text-muted-foreground" />
+                      <UserPlus size={14} className="text-slate-400" />
                       Add Members
                     </button>
                     <button
@@ -179,12 +188,12 @@ export default function RoomHeader({
                         setShowMenu(false);
                         setShowSettings(true);
                       }}
-                      className="flex w-full items-center gap-2.5 px-3 py-2 text-foreground text-sm hover:bg-muted"
+                      className="flex w-full items-center gap-2.5 px-3 py-2 text-slate-200 text-sm hover:bg-white/10"
                     >
-                      <Settings size={14} className="text-muted-foreground" />
+                      <Settings size={14} className="text-slate-400" />
                       Group Settings
                     </button>
-                    <div className="my-1 border-border border-t" />
+                    <div className="my-1 border-white/10 border-t" />
                   </>
                 )}
 
@@ -192,7 +201,7 @@ export default function RoomHeader({
                   type="button"
                   onClick={handleLeave}
                   disabled={leaving}
-                  className="flex w-full items-center gap-2.5 px-3 py-2 text-destructive text-sm hover:bg-destructive/5 disabled:opacity-50"
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-rose-400 text-sm hover:bg-rose-500/10 disabled:opacity-50"
                 >
                   <LogOut size={14} />
                   {isGroup ? "Leave Group" : "Delete Conversation"}
@@ -203,25 +212,25 @@ export default function RoomHeader({
         </div>
 
         {isGroup && showMembers && (
-          <div className="absolute top-14 right-0 bottom-0 z-10 w-64 overflow-y-auto border-border border-l bg-background">
-            <div className="border-border border-b px-4 py-3">
-              <p className="font-medium text-foreground text-sm">Members ({members.length})</p>
+          <div className="absolute top-14 right-0 bottom-0 z-10 w-64 overflow-y-auto border-white/10 border-l bg-[#0e0e2a]/95 backdrop-blur-xl">
+            <div className="border-white/10 border-b px-4 py-3">
+              <p className="font-medium text-slate-100 text-sm">Members ({members.length})</p>
             </div>
             {members.map((m) => (
-              <div key={m.user_id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted">
+              <div key={m.user_id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/5">
                 <div className="relative shrink-0">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 font-medium text-primary text-xs">
+                  <div
+                    className={`flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br font-semibold text-white text-xs shadow-md ${roomGradient(m.user_id)}`}
+                  >
                     {(m.name ?? m.email).charAt(0).toUpperCase()}
                   </div>
                   {m.is_online && (
-                    <span className="absolute right-0 bottom-0 h-2 w-2 rounded-full bg-green-500 ring-1 ring-background" />
+                    <span className="absolute right-0 bottom-0 h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.8)] ring-1 ring-[#0e0e2a]" />
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-foreground text-sm">
-                    {m.name ?? m.email}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground capitalize">{m.role}</p>
+                  <p className="truncate font-medium text-slate-100 text-sm">{m.name ?? m.email}</p>
+                  <p className="text-[10px] text-slate-500 capitalize">{m.role}</p>
                 </div>
               </div>
             ))}

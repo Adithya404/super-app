@@ -189,3 +189,137 @@
     @apply mx-auto max-w-7xl px-6;
   }
 }
+
+/* -------------------------------- */
+/* PingPal cosmic theme             */
+/* -------------------------------- */
+
+@keyframes pp-aurora {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(6%, -8%, 0) scale(1.15);
+  }
+  66% {
+    transform: translate3d(-7%, 6%, 0) scale(0.9);
+  }
+}
+
+@keyframes pp-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes pp-orb {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  50% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+@keyframes pp-shimmer {
+  from {
+    background-position: 200% 50%;
+  }
+  to {
+    background-position: -200% 50%;
+  }
+}
+
+@keyframes pp-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@layer components {
+  /* Deep-space canvas with drifting aurora blobs + starfield */
+  .pp-scene {
+    position: relative;
+    isolation: isolate;
+    background:
+      radial-gradient(circle at 12% 18%, rgba(255, 255, 255, 0.05) 1px, transparent 1.5px),
+      radial-gradient(circle at 68% 42%, rgba(255, 255, 255, 0.045) 1px, transparent 1.5px),
+      radial-gradient(circle at 34% 78%, rgba(255, 255, 255, 0.05) 1px, transparent 1.5px),
+      radial-gradient(circle at 88% 82%, rgba(255, 255, 255, 0.04) 1px, transparent 1.5px),
+      linear-gradient(160deg, #07071c 0%, #0b0b26 45%, #0d0a24 100%);
+    background-size:
+      190px 190px,
+      230px 230px,
+      170px 170px,
+      210px 210px,
+      100% 100%;
+  }
+
+  .pp-scene::before,
+  .pp-scene::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    border-radius: 9999px;
+    filter: blur(90px);
+    pointer-events: none;
+  }
+
+  .pp-scene::before {
+    top: -18%;
+    left: -12%;
+    width: 55%;
+    height: 55%;
+    background: radial-gradient(
+      circle,
+      rgba(139, 92, 246, 0.28) 0%,
+      rgba(34, 211, 238, 0.14) 55%,
+      transparent 75%
+    );
+    animation: pp-aurora 22s ease-in-out infinite;
+  }
+
+  .pp-scene::after {
+    right: -15%;
+    bottom: -20%;
+    width: 60%;
+    height: 60%;
+    background: radial-gradient(
+      circle,
+      rgba(232, 121, 249, 0.22) 0%,
+      rgba(99, 102, 241, 0.14) 50%,
+      transparent 75%
+    );
+    animation: pp-aurora 28s ease-in-out infinite reverse;
+  }
+
+  /* Frosted panel used for headers / bars inside the scene */
+  .pp-glass {
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+
+  /* Shimmering gradient text for the brand */
+  .pp-brand-text {
+    background: linear-gradient(90deg, #67e8f9, #a78bfa, #f0abfc, #67e8f9);
+    background-size: 200% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    animation: pp-shimmer 6s linear infinite;
+  }
+}

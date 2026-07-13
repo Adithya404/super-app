@@ -148,8 +148,26 @@ export default function ChatWindow({
   }, [roomId, send]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
-    bottomRef.current?.scrollIntoView({ behavior });
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
   }, []);
+
+  const scrollChildIntoView = useCallback(
+    (child: HTMLElement, block: "center" | "start" = "center") => {
+      const container = scrollRef.current;
+      if (!container) return;
+      const containerRect = container.getBoundingClientRect();
+      const childRect = child.getBoundingClientRect();
+      const relativeTop = childRect.top - containerRect.top + container.scrollTop;
+      const nextTop =
+        block === "center"
+          ? relativeTop - container.clientHeight / 2 + childRect.height / 2
+          : relativeTop;
+      container.scrollTop = Math.max(0, nextTop);
+    },
+    [],
+  );
 
   const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : null;
 
@@ -166,7 +184,7 @@ export default function ChatWindow({
           unreadRef.current &&
           (() => {
             isNearBottom.current = false;
-            unreadRef.current?.scrollIntoView({ block: "center" });
+            scrollChildIntoView(unreadRef.current, "center");
             return true;
           })();
 
@@ -176,7 +194,7 @@ export default function ChatWindow({
             requestAnimationFrame(() => {
               if (unreadRef.current) {
                 isNearBottom.current = false;
-                unreadRef.current.scrollIntoView({ block: "center" });
+                scrollChildIntoView(unreadRef.current, "center");
               } else {
                 isNearBottom.current = true;
                 scrollToBottom("auto");
@@ -193,7 +211,14 @@ export default function ChatWindow({
         prevLastMessageId.current = lastMessageId;
       });
     });
-  }, [loading, messages.length, firstUnreadMessageId, lastMessageId, scrollToBottom]);
+  }, [
+    loading,
+    messages.length,
+    firstUnreadMessageId,
+    lastMessageId,
+    scrollToBottom,
+    scrollChildIntoView,
+  ]);
 
   // Preserve scroll position when older messages are prepended
   useEffect(() => {
@@ -285,7 +310,7 @@ export default function ChatWindow({
   );
 
   return (
-    <div className="relative flex flex-1 flex-col overflow-hidden">
+    <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       {room && (
         <RoomHeader
           room={room}
@@ -295,24 +320,30 @@ export default function ChatWindow({
         />
       )}
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto py-4" onScroll={handleScroll}>
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto py-4" onScroll={handleScroll}>
         {loading ? (
           <div className="flex h-full items-center justify-center">
-            <Loader2 size={20} className="animate-spin text-muted-foreground" />
+            <Loader2 size={20} className="animate-spin text-violet-400" />
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex h-full items-center justify-center">
-            <p className="text-muted-foreground text-sm">No messages yet. Say hello!</p>
+          <div className="flex h-full flex-col items-center justify-center gap-3">
+            <span
+              className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500/15 to-fuchsia-500/15 text-2xl ring-1 ring-white/10"
+              style={{ animation: "pp-float 4s ease-in-out infinite" }}
+            >
+              👋
+            </span>
+            <p className="text-slate-400 text-sm">No messages yet. Break the silence!</p>
           </div>
         ) : (
           <>
             {loadingMore && (
               <div className="flex justify-center py-2">
-                <Loader2 size={16} className="animate-spin text-muted-foreground" />
+                <Loader2 size={16} className="animate-spin text-violet-400" />
               </div>
             )}
             {hasMore && !loadingMore && (
-              <p className="py-1 text-center text-[11px] text-muted-foreground/60">
+              <p className="py-1 text-center text-[11px] text-slate-500">
                 Scroll up for older messages
               </p>
             )}
@@ -321,19 +352,21 @@ export default function ChatWindow({
               <div key={msg.id}>
                 {msg.id === firstUnreadMessageId && (
                   <div ref={unreadRef} className="my-3 flex items-center gap-3 px-4">
-                    <div className="flex-1 border-primary/30 border-t" />
-                    <span className="font-medium text-[11px] text-primary">Unread messages</span>
-                    <div className="flex-1 border-primary/30 border-t" />
+                    <div className="flex-1 border-cyan-400/30 border-t" />
+                    <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-0.5 font-medium text-[11px] text-cyan-300">
+                      Unread messages
+                    </span>
+                    <div className="flex-1 border-cyan-400/30 border-t" />
                   </div>
                 )}
 
                 {shouldShowDate(i) && (
                   <div className="flex items-center gap-3 px-4 py-3">
-                    <div className="flex-1 border-border border-t" />
-                    <span className="text-[11px] text-muted-foreground">
+                    <div className="flex-1 border-white/8 border-t" />
+                    <span className="rounded-full border border-white/10 bg-white/5 px-3 py-0.5 text-[11px] text-slate-400">
                       {formatDateLabel(msg.created_at)}
                     </span>
-                    <div className="flex-1 border-border border-t" />
+                    <div className="flex-1 border-white/8 border-t" />
                   </div>
                 )}
 
@@ -356,13 +389,13 @@ export default function ChatWindow({
             ))}
 
             {hasMoreNewer && !loadingNewer && (
-              <p className="py-1 text-center text-[11px] text-muted-foreground/60">
+              <p className="py-1 text-center text-[11px] text-slate-500">
                 Scroll down for newer messages
               </p>
             )}
             {loadingNewer && (
               <div className="flex justify-center py-2">
-                <Loader2 size={16} className="animate-spin text-muted-foreground" />
+                <Loader2 size={16} className="animate-spin text-violet-400" />
               </div>
             )}
           </>

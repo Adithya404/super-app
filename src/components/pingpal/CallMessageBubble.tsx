@@ -25,11 +25,13 @@ export default function CallMessageBubble({
     <div className={`flex px-4 py-0.5 ${isOwn ? "justify-end" : "justify-start"}`}>
       <div className={`flex max-w-[75%] flex-col gap-0.5 ${isOwn ? "items-end" : "items-start"}`}>
         <div
-          className={`flex min-w-[180px] items-center gap-3 rounded-2xl px-3 py-2.5 ${
-            isOwn ? "rounded-tr-sm bg-emerald-700" : "rounded-tl-sm bg-emerald-800"
+          className={`flex min-w-[180px] items-center gap-3 px-3 py-2.5 shadow-[0_4px_18px_rgba(16,185,129,0.25)] ${
+            isOwn
+              ? "rounded-[1.25rem_1.25rem_0.375rem_1.25rem] bg-gradient-to-br from-emerald-500 to-teal-700"
+              : "rounded-[1.25rem_1.25rem_1.25rem_0.375rem] bg-gradient-to-br from-emerald-600 to-teal-800"
           }`}
         >
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/25">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/25 ring-1 ring-white/20">
             <span className="relative text-white">
               <Icon size={16} />
               <DirectionIcon size={10} className="absolute -top-1 -right-1 opacity-90" />
@@ -41,7 +43,7 @@ export default function CallMessageBubble({
           </div>
         </div>
 
-        <span className="px-1 text-[10px] text-muted-foreground/50">
+        <span className="px-1 text-[10px] text-slate-500">
           {new Date(message.created_at).toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",

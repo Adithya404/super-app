@@ -57,13 +57,24 @@ function AppShellInner({ children, hideSidebar }: Pick<AppShellProps, "children"
     }
   }
 
+  const isPingPal = pathname.startsWith("/pp");
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {leftSidebar}
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <Topbar appName={activeTeam?.name ?? "Super Portal"} pageName={activePageName} />
-        <main className={cn("flex-1", slotSidebar ? "overflow-hidden" : "overflow-y-auto")}>
+        <Topbar
+          appName={activeTeam?.name ?? "Super Portal"}
+          pageName={activePageName}
+          hideThemeToggle={isPingPal}
+        />
+        <main
+          className={cn(
+            "flex min-h-0 flex-1 flex-col",
+            slotSidebar ? "overflow-hidden" : "overflow-y-auto",
+          )}
+        >
           {children}
         </main>
       </div>

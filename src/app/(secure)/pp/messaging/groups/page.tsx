@@ -156,14 +156,14 @@ export default function GroupsPage() {
     <>
       {!roomId ? (
         <EmptyState
-          icon={<Users size={40} className="text-muted-foreground/40" />}
+          icon={<Users size={40} className="text-fuchsia-300/70" />}
           title="Group Chats"
           description="Create a group or select one to start chatting"
           action={
             <button
               type="button"
               onClick={() => setShowCreateGroup(true)}
-              className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground text-sm transition-opacity hover:opacity-90"
+              className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-5 py-2 font-medium text-sm text-white shadow-[0_0_16px_rgba(232,121,249,0.4)] transition-all hover:scale-105 hover:shadow-[0_0_24px_rgba(232,121,249,0.6)]"
             >
               <Plus size={15} />
               New Group

@@ -9,9 +9,10 @@ import { Button } from "../ui/button";
 type TopbarProps = {
   appName: string;
   pageName: string;
+  hideThemeToggle?: boolean;
 };
 
-export default function Topbar({ appName, pageName }: TopbarProps) {
+export default function Topbar({ appName, pageName, hideThemeToggle = false }: TopbarProps) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -28,18 +29,19 @@ export default function Topbar({ appName, pageName }: TopbarProps) {
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-2">
-        {/* Dark mode toggle */}
-        {mounted && (
-          <Button
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="Toggle theme"
-          >
-            {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
-          </Button>
-        )}
-      </div>
+      {!hideThemeToggle && (
+        <div className="flex items-center gap-2">
+          {mounted && (
+            <Button
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Toggle theme"
+            >
+              {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+            </Button>
+          )}
+        </div>
+      )}
     </header>
   );
 }

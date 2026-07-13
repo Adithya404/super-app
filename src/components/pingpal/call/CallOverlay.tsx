@@ -37,14 +37,21 @@ export default function CallOverlay() {
   }, [call.status, call.connectedAt]);
 
   useEffect(() => {
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = call.localStream;
+    const el = localVideoRef.current;
+    if (!el) return;
+    el.srcObject = call.localStream;
+    if (call.localStream) {
+      void el.play().catch(() => {});
     }
   }, [call.localStream]);
 
   useEffect(() => {
-    if (remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = call.remoteStream;
+    const el = remoteVideoRef.current;
+    if (!el) return;
+    el.srcObject = call.remoteStream;
+    if (call.remoteStream) {
+      // Muted video element — autoplay is allowed; audio plays via <audio>.
+      void el.play().catch(() => {});
     }
   }, [call.remoteStream]);
 

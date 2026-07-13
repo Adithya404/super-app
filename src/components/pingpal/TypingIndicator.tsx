@@ -23,16 +23,16 @@ export default function TypingIndicator({
 
   return (
     <div className="flex items-center gap-2 px-4 py-1.5">
-      <div className="flex items-center gap-0.5">
+      <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1.5">
         {[0, 1, 2].map((i) => (
           <span
             key={i}
-            className="block h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/50"
-            style={{ animationDelay: `${i * 0.15}s`, animationDuration: "0.8s" }}
+            className="block h-1.5 w-1.5 rounded-full bg-gradient-to-r from-cyan-400 to-fuchsia-400"
+            style={{ animation: `pp-orb 1s ease-in-out ${i * 0.15}s infinite` }}
           />
         ))}
       </div>
-      <span className="text-muted-foreground text-xs">{label}</span>
+      <span className="text-slate-400 text-xs">{label}</span>
     </div>
   );
 }
