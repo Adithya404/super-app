@@ -123,13 +123,13 @@ ${attributes}
 
 export function generateHook(className: string, _module: string, path: string): string {
   const dsId = className;
-  return `import { useStore as useBaseStore } from '@/lib/common/store/use-store';
+  return `import { useStore as useBaseStore } from "@/lib/common/store";
 
 export function useStore() {
   return useBaseStore({
-    datasourceId: '${dsId}',
-    page: '${path}-page',
-    alias: '${path}-all',
+    datasourceId: "${dsId}",
+    page: "${path}-page",
+    alias: "${path}-all",
     limit: 100,
     includeCount: true,
     autoQuery: true,
@@ -142,13 +142,98 @@ export function generateTableColumns(
   className: string,
   module: string,
   columns: ColumnInfo[],
+  hasEditForm = false,
 ): string {
-  return `import type { ColumnDef } from "@tanstack/react-table";
-import type { ${className} } from "@/lib/common/ds/types/${module}/${className}";
+  const hasDate = columns.some((c) => {
+    const t = mapPgTypeToDataType(c.data_type);
+    return t === "Date" || t === "DateTime";
+  });
+
+  const imports = [
+    hasEditForm ? `"use client";` : null,
+    `import type { ColumnDef } from "@tanstack/react-table";`,
+    hasEditForm ? `import { MoreHorizontal, Pencil } from "lucide-react";` : null,
+    hasEditForm ? `import { Button } from "@/components/ui/button";` : null,
+    hasEditForm
+      ? `import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";`
+      : null,
+    hasDate ? `import { formatDateOnly } from "@/lib/common/date";` : null,
+    `import type { ${className} } from "@/lib/common/ds/types/${module}/${className}";`,
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
+
+  const columnDefs = columns
+    .map((c) => {
+      const key = toCamelCase(c.column_name);
+      const header = toPascalCase(c.column_name);
+      const dataType = mapPgTypeToDataType(c.data_type);
+      if (dataType === "Date" || dataType === "DateTime") {
+        return `  {
+    accessorKey: "${key}",
+    header: "${header}",
+    cell: ({ row }) => formatDateOnly(row.getValue("${key}") as string | Date | null),
+  },`;
+      }
+      return `  { accessorKey: "${key}", header: "${header}" },`;
+    })
+    .join("\n");
+
+  if (!hasEditForm) {
+    return `${imports}
 
 export const columns: ColumnDef<${className}>[] = [
-${columns.map((c) => `  { accessorKey: "${toCamelCase(c.column_name)}", header: "${toPascalCase(c.column_name)}" },`).join("\n")}
+${columnDefs}
 ];
+`;
+  }
+
+  return `${imports}
+
+function ActionsCell({
+  row,
+  onEdit,
+}: {
+  row: ${className};
+  onEdit: (row: ${className}) => void;
+}) {
+  return (
+    <div className="px-2">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => onEdit(row)}>
+            <Pencil className="mr-2 h-4 w-4" />
+            Edit
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
+export function getColumns(handlers: {
+  onEdit: (row: ${className}) => void;
+}): ColumnDef<${className}>[] {
+  return [
+${columnDefs}
+    {
+      id: "actions",
+      header: "",
+      size: 48,
+      cell: ({ row }) => <ActionsCell row={row.original} onEdit={handlers.onEdit} />,
+    },
+  ];
+}
 `;
 }
 
@@ -168,7 +253,7 @@ export function generatePageContent(
     return `"use client";
 import { PageLayoutTemplate } from "@/components/layout/common/PageLayoutTemplate";
 import ${className}EditForm from "./components/edit-form";
-import { columns } from "./hooks/table-columns";
+import { getColumns } from "./hooks/table-columns";
 import { useStore } from "./hooks/use-store";
 
 export default function PageContent() {
@@ -178,7 +263,7 @@ export default function PageContent() {
     <PageLayoutTemplate
       title="${title}"
       description="Manage ${title} data."
-      columns={columns}
+      getColumns={getColumns}
       store={store}
       editForm={<${className}EditForm />}
     />
@@ -189,8 +274,8 @@ export default function PageContent() {
 
   return `"use client";
 import { PageLayoutTemplate } from "@/components/layout/common/PageLayoutTemplate";
-import { useStore } from "./hooks/use-store";
 import { columns } from "./hooks/table-columns";
+import { useStore } from "./hooks/use-store";
 
 export default function PageContent() {
   const store = useStore();
@@ -213,15 +298,22 @@ export function generateEditFormContent(
   columns: ColumnInfo[],
 ): string {
   const hasBoolean = columns.some((c) => mapPgTypeToDataType(c.data_type) === "Boolean");
+  const hasDate = columns.some((c) => {
+    const t = mapPgTypeToDataType(c.data_type);
+    return t === "Date" || t === "DateTime";
+  });
 
   const imports = [
+    `"use client";`,
+    ``,
     `import { Input } from "@/components/ui/input";`,
     `import { Label } from "@/components/ui/label";`,
     hasBoolean ? `import { Checkbox } from "@/components/ui/checkbox";` : null,
+    hasDate ? `import { parseDateLocal, toDateInputValue } from "@/lib/common/date";` : null,
     `import type { ${className} } from "@/lib/common/ds/types/${module}/${className}";`,
-    `import type { Store } from "@/lib/common/store/types";`,
+    `import { useCurrentRowSync, type Store } from "@/lib/common/store";`,
   ]
-    .filter(Boolean)
+    .filter((line) => line !== null)
     .join("\n");
 
   const fields = columns
@@ -239,7 +331,7 @@ export function generateEditFormContent(
         <Checkbox
           id="${camelName}"${isPrimary ? "\n          disabled={fromDB}" : ""}
           checked={!!row.${camelName}}
-          onCheckedChange={(checked) => handleChange("${camelName}", !!checked)}
+          onCheckedChange={(checked) => store.setValue("${camelName}", !!checked)}
         />
         ${labelTag}
       </div>`;
@@ -254,7 +346,7 @@ export function generateEditFormContent(
           value={row.${camelName} ?? ""}
           onChange={(e) => {
             const val = e.target.value;
-            handleChange("${camelName}", val === "" ? null : Number(val));
+            store.setValue("${camelName}", val === "" ? undefined : Number(val));
           }}
         />
       </div>`;
@@ -266,48 +358,46 @@ export function generateEditFormContent(
         <Input
           id="${camelName}"
           type="date"${isPrimary ? "\n          disabled={fromDB}" : ""}
-          value={row.${camelName} ? new Date(row.${camelName}).toISOString().split("T")[0] : ""}
-          onChange={(e) => handleChange("${camelName}", e.target.value)}
+          value={toDateInputValue(row.${camelName})}
+          onChange={(e) =>
+            store.setValue("${camelName}", e.target.value ? parseDateLocal(e.target.value) : undefined)
+          }
         />
       </div>`;
       }
 
-      // Default to Text
       return `      <div className="grid gap-2">
         ${labelTag}
         <Input
           id="${camelName}"${isPrimary ? "\n          disabled={fromDB}" : ""}
           value={row.${camelName} || ""}
-          onChange={(e) => handleChange("${camelName}", e.target.value)}
+          onChange={(e) => store.setValue("${camelName}", e.target.value)}
         />
       </div>`;
     })
     .join("\n\n");
 
-  return `"use client";
+  return `${imports}
 
-${imports}
+function ${className}EditFormInner({ store }: { store: Store<${className}> }) {
+  const row = useCurrentRowSync(store);
 
-export default function ${className}EditForm({ store }: { store?: Store<${className}> }) {
-  const row = store?.currentRow;
-
-  if (!row || !store) {
+  if (!row) {
     return null;
   }
 
   const fromDB = row._status !== "I";
-
-  const handleChange = (field: string, value: any) => {
-    if (row._cid) {
-      store.updateRow(row._cid, { [field]: value });
-    }
-  };
 
   return (
     <div className="grid gap-4 py-2">
 ${fields}
     </div>
   );
+}
+
+export default function ${className}EditForm({ store }: { store?: Store<${className}> }) {
+  if (!store) return null;
+  return <${className}EditFormInner store={store} />;
 }
 `;
 }

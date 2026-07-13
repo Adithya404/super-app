@@ -21,9 +21,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useIsStoreLoading } from "@/lib/common/store/store-hooks";
-import type { Store } from "@/lib/common/store/types";
-import { useRows } from "@/lib/common/store/use-rows";
+import {
+  type Store,
+  useDBRows,
+  useIsStoreDirty,
+  useIsStoreLoading,
+  useIsStorePosting,
+} from "@/lib/common/store";
 
 // Note: TData should extend object for Store<TData>
 interface PageLayoutTemplateProps<TData extends object, TValue> {
@@ -104,15 +108,15 @@ export function PageLayoutTemplate<TData extends object, TValue>({
   editForm,
   toolbar,
 }: PageLayoutTemplateProps<TData, TValue>) {
-  const data = useRows(store);
+  const data = useDBRows(store) as TData[];
   const isLoading = useIsStoreLoading(store);
+  const isDirty = useIsStoreDirty(store);
+  const isPosting = useIsStorePosting(store);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"add" | "edit">("add");
 
   const handleEdit = (row: TData) => {
-    if (store?.beginEdit) {
-      store.beginEdit(row);
-    }
+    store.beginEdit?.(row);
     setDialogMode("edit");
     setIsDialogOpen(true);
   };
@@ -120,20 +124,15 @@ export function PageLayoutTemplate<TData extends object, TValue>({
   const resolvedColumns = getColumns?.({ onEdit: handleEdit }) ?? staticColumns ?? [];
 
   const handleAddNew = () => {
-    if (store?.createNew) {
-      store.createNew();
-    }
+    // Initialize store BEFORE opening dialog (avoid useEffect timing issues)
+    store.createNew();
     setDialogMode("add");
     setIsDialogOpen(true);
   };
 
   const handleSave = async () => {
-    if (store?.save) {
-      const success = await store.save();
-      if (success !== false) {
-        setIsDialogOpen(false);
-      }
-    } else {
+    const success = await store.save({ feedback: `${title} saved` });
+    if (success) {
       setIsDialogOpen(false);
     }
   };
@@ -211,10 +210,16 @@ export function PageLayoutTemplate<TData extends object, TValue>({
             </DialogHeader>
             <div className="max-h-[70vh] overflow-y-auto px-1 py-4">{editFormWithStore}</div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => handleDialogOpenChange(false)}>
+              <Button
+                variant="outline"
+                onClick={() => handleDialogOpenChange(false)}
+                disabled={isPosting}
+              >
                 Cancel
               </Button>
-              <Button onClick={handleSave}>Save</Button>
+              <Button onClick={handleSave} disabled={isPosting || !isDirty}>
+                {isPosting ? "Saving…" : "Save"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

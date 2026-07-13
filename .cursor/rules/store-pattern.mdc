@@ -1,0 +1,126 @@
+---
+description: Store pattern for valtio DataSource state management
+globs:
+  - "src/**/use-store.ts"
+  - "src/**/*-store.ts"
+  - "src/**/page-content.tsx"
+  - "src/**/edit-form.tsx"
+  - "src/lib/common/store/**/*.ts"
+  - "src/components/layout/common/PageLayoutTemplate.tsx"
+alwaysApply: false
+---
+
+# Store Pattern
+
+Valtio-based store wrapping DataSource CRUD. Implementation: `src/lib/common/store/`.
+
+## Identity
+
+Stores are shared by key: `${alias}-${datasourceId}-${page}`.
+
+```typescript
+// Same key → same instance
+useStore({ datasourceId: "Users", page: "users-page", alias: "users-all" });
+```
+
+## Row Status
+
+| Status | Meaning |
+|--------|---------|
+| `Q` | Queried from DB, unchanged |
+| `I` | Insert pending |
+| `U` | Update pending |
+| `D` | Delete pending |
+| `N` | Local-only (not saved) |
+
+## Custom Hook
+
+```typescript
+// hooks/use-store.ts
+import { useStore as useBaseStore } from "@/lib/common/store";
+
+export function useStore() {
+  return useBaseStore({
+    datasourceId: "Users",
+    page: "users-page",
+    alias: "users-all",
+    limit: 100,
+    includeCount: true,
+    autoQuery: true,
+  });
+}
+```
+
+### Config by use case
+
+- **List**: `limit: 20`, `includeCount: true`, `autoQuery: true`
+- **Dialog**: separate `alias` (e.g. `users-dialog`), `limit: 1`, `autoQuery: false`
+- **Lookup**: `select`-like projection via filters; `autoQuery: false` or true for options
+
+## Alias Naming
+
+| Pattern | Use |
+|---------|-----|
+| `{module}-list` / `{module}-all` | Lists |
+| `{module}-edit` | Detail/edit |
+| `{module}-dialog` | Dialogs |
+| `{module}-combobox` | Lookups |
+
+## Reactive Hooks (use in render)
+
+| Hook | Use |
+|------|-----|
+| `useCurrentRowSync` | Forms (prevents cursor jump) |
+| `useCurrentRow` | Display-only current row |
+| `useDBRows` | List pages (DB rows) |
+| `useRows` | Lists that include unsaved rows |
+| `useRowValue` | Single field from a row |
+| `useIsStoreLoading` / `useIsStorePosting` / `useIsStoreDirty` | UI state |
+
+```typescript
+// ❌ Non-reactive during render
+const rows = store.list();
+const row = store.currentRow;
+
+// ✅ Reactive
+const rows = useDBRows(store);
+const row = useCurrentRowSync(store);
+```
+
+## CRUD
+
+```typescript
+// Create — before opening dialog
+store.createNew({ partialRecord: { status: "draft" } });
+setOpen(true);
+
+// Edit
+store.beginEdit(row); // or setCurrentRow(row)
+setOpen(true);
+
+// Update field
+store.setValue("name", value);
+
+// Save (auto-refreshes; toast via feedback)
+await store.save({ feedback: "User saved" });
+await store.save({ feedback: "NONE" }); // silent
+
+// Delete
+await store.deleteRow(id);
+await store.save({ feedback: "Deleted" });
+
+// Cancel
+store.resetStore();
+```
+
+## Anti-Patterns
+
+- Don't init `createNew` in `useEffect` when dialog opens — do it in the click handler
+- Don't `executeQuery()` / `refresh()` after `save()` on the **same** store
+- Don't use `useCurrentRow` for form inputs — use `useCurrentRowSync`
+- Don't create two stores with the same key but different configs — change `alias`
+
+## Same-Store vs View+Staging
+
+- **Same store**: table + form share one store → `save()` updates UI automatically
+- **View + staging**: edit staging store, then `viewStore.refresh()` / `refreshRow()` after save

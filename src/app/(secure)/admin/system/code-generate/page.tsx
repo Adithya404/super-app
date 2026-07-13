@@ -124,8 +124,8 @@ export default function CodeGeneratePage() {
           content: generateHook(className, moduleValue, kebabName),
         },
         {
-          path: `${baseAppPath}/hooks/table-columns.ts`,
-          content: generateTableColumns(className, moduleValue, columns),
+          path: `${baseAppPath}/hooks/table-columns.${generateEditForm ? "tsx" : "ts"}`,
+          content: generateTableColumns(className, moduleValue, columns, generateEditForm),
         },
       ];
 

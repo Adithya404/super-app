@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { formatDateOnly } from "@/lib/common/date";
 import { F, type Filters } from "@/lib/common/ds/filters";
 import type { Roles } from "@/lib/common/ds/types/admin/Roles";
 import type { UserRoles } from "@/lib/common/ds/types/admin/UserRoles";
@@ -28,12 +29,13 @@ function isRoleActive(endDate?: Date | string | null) {
   if (!endDate) return true;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  return new Date(endDate) >= today;
+  const end = endDate instanceof Date ? endDate : new Date(endDate);
+  end.setHours(0, 0, 0, 0);
+  return end >= today;
 }
 
 function formatDate(value?: Date | string | null) {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString();
+  return formatDateOnly(value);
 }
 
 async function fetchDatasource<T extends object>(datasourceId: string, filters: Filters<T> = []) {

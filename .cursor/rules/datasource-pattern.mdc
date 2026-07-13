@@ -1,0 +1,57 @@
+---
+description: Pattern for creating DataSource definitions
+globs: src/lib/common/ds/**/*.ts
+alwaysApply: false
+---
+
+# DataSource Pattern
+
+DataSources live under `src/lib/common/ds/definitions/` and register via `src/lib/common/ds/registry.ts`.
+
+## Basic Shape
+
+```typescript
+import type { DataSource } from "@/lib/common/ds/types";
+import { DefaultAttribute, DefaultDataSource, DefaultFullAccess } from "@/lib/common/ds/defaults";
+import type { Entity } from "@/lib/common/ds/types/module/Entity";
+
+export const EntityDataSource: DataSource = {
+  ...DefaultDataSource,
+  id: "Entity",
+  tableName: "entity",
+  attributes: [
+    {
+      ...DefaultAttribute,
+      code: "id",
+      name: "ID",
+      type: "UUID",
+      column: "id",
+      primary: true,
+      optional: false,
+    },
+    {
+      ...DefaultAttribute,
+      code: "name",
+      name: "Name",
+      type: "Text",
+      column: "name",
+      maxLength: 120,
+      optional: false,
+    },
+  ],
+  access: [{ ...DefaultFullAccess, roleCode: "admin" }],
+};
+```
+
+## Checklist
+
+1. Add TypeScript type in `src/lib/common/ds/types/...`
+2. Add DS definition file
+3. Register in module index + `registry.ts`
+4. Create page `hooks/use-store.ts` pointing at `datasourceId`
+
+## Attribute Types
+
+`Text` | `Number` | `Boolean` | `Date` | `DateTime` | `UUID` | `JSON`
+
+Keep attribute `code` (camelCase) in sync with the entity interface. Column names are snake_case in SQL.

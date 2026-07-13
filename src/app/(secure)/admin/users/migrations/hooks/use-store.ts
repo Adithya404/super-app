@@ -1,4 +1,4 @@
-import { useStore } from "@/lib/common/store/use-store";
+import { useStore } from "@/lib/common/store";
 
 export function useMigrationsStore() {
   return useStore({

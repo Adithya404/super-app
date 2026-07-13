@@ -1,7 +1,7 @@
 "use client";
 import { PageLayoutTemplate } from "@/components/layout/common/PageLayoutTemplate";
 import RolesEditForm from "./components/edit-form";
-import { columns } from "./hooks/table-columns";
+import { getColumns } from "./hooks/table-columns";
 import { useStore } from "./hooks/use-store";
 
 export default function PageContent() {
@@ -11,7 +11,7 @@ export default function PageContent() {
     <PageLayoutTemplate
       title="Roles"
       description="Manage Roles data."
-      columns={columns}
+      getColumns={getColumns}
       store={store}
       editForm={<RolesEditForm />}
     />

@@ -1,0 +1,61 @@
+---
+description: Standard page structure with PageLayoutTemplate
+globs: src/app/**/page.tsx, src/app/**/page-content.tsx
+alwaysApply: false
+---
+
+# Page Pattern
+
+## Structure
+
+```
+src/app/(secure)/module/feature/
+├── page.tsx              # Route entry
+├── page-content.tsx      # Client content + store
+├── hooks/
+│   ├── use-store.ts
+│   └── table-columns.tsx
+└── components/
+    └── edit-form.tsx
+```
+
+## page.tsx
+
+```typescript
+import PageContent from "./page-content";
+
+export default function Page() {
+  return <PageContent />;
+}
+```
+
+## page-content.tsx
+
+```typescript
+"use client";
+
+import { PageLayoutTemplate } from "@/components/layout/common/PageLayoutTemplate";
+import EditForm from "./components/edit-form";
+import { getColumns } from "./hooks/table-columns";
+import { useStore } from "./hooks/use-store";
+
+export default function PageContent() {
+  const store = useStore();
+
+  return (
+    <PageLayoutTemplate
+      title="Users"
+      description="Manage users"
+      getColumns={getColumns}
+      store={store}
+      editForm={<EditForm />}
+    />
+  );
+}
+```
+
+## Rules
+
+- Keep store creation in `hooks/use-store.ts` (stable alias/page/datasourceId)
+- Pass the same store instance to table + form (PageLayoutTemplate clones `editForm` with `store`)
+- Initialize create/edit on the click handler, not in `useEffect`

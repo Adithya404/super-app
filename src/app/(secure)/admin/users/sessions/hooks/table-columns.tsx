@@ -1,4 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { formatDateTime } from "@/lib/common/date";
 import type { Sessions } from "@/lib/common/ds/types/admin/Sessions";
 import { SessionActionsCell } from "../components/actions-cell";
 
@@ -17,10 +18,7 @@ export function getColumns(onSignOut: (sessionId: string) => Promise<void>): Col
     {
       accessorKey: "expires",
       header: "Expires",
-      cell: ({ row }) => {
-        const value = row.getValue("expires") as string;
-        return value ? new Date(value).toLocaleString() : "—";
-      },
+      cell: ({ row }) => formatDateTime(row.getValue("expires") as string | Date | null),
     },
     {
       id: "actions",

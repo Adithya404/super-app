@@ -1,0 +1,19 @@
+---
+description: Use named parameters for functions with more than 2 parameters
+globs: "**/*.ts,**/*.tsx"
+alwaysApply: false
+---
+
+# Named Parameters
+
+Functions with more than 2 parameters should use an options object.
+
+```typescript
+// ❌ Positional
+async function process(client, id, from, to, warnings) {}
+
+// ✅ Named
+async function process({ client, id, from, to, warnings }: ProcessParams) {}
+```
+
+Exceptions: well-known 2-arg APIs (`map(x, i)`), and framework-required signatures.

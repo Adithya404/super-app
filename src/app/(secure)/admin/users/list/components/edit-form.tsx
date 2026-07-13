@@ -4,28 +4,22 @@ import { useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Users } from "@/lib/common/ds/types/admin/Users";
-import type { Store } from "@/lib/common/store/types";
+import { type Store, useCurrentRowSync } from "@/lib/common/store";
 
-export default function UsersEditForm({ store }: { store?: Store<Users> }) {
-  const row = store?.currentRow;
+function UsersEditFormInner({ store }: { store: Store<Users> }) {
+  const row = useCurrentRowSync(store);
 
   useEffect(() => {
-    if (row?._status === "I" && !row.id && row._cid && store) {
-      store.updateRow(row._cid, { id: crypto.randomUUID() });
+    if (row?._status === "I" && !row.id) {
+      store.setValue("id", crypto.randomUUID());
     }
-  }, [row?._status, row?.id, row?._cid, store]);
+  }, [row?._status, row?.id, store]);
 
-  if (!row || !store) {
+  if (!row) {
     return null;
   }
 
   const isNew = row._status === "I";
-
-  const handleChange = (field: string, value: string) => {
-    if (row._cid) {
-      store.updateRow(row._cid, { [field]: value });
-    }
-  };
 
   return (
     <div className="grid gap-4 py-2">
@@ -34,7 +28,7 @@ export default function UsersEditForm({ store }: { store?: Store<Users> }) {
         <Input
           id="name"
           value={row.name || ""}
-          onChange={(e) => handleChange("name", e.target.value)}
+          onChange={(e) => store.setValue("name", e.target.value)}
           placeholder="John Doe"
         />
       </div>
@@ -49,7 +43,7 @@ export default function UsersEditForm({ store }: { store?: Store<Users> }) {
           required
           disabled={!isNew}
           value={row.email || ""}
-          onChange={(e) => handleChange("email", e.target.value)}
+          onChange={(e) => store.setValue("email", e.target.value)}
           placeholder="user@example.com"
         />
       </div>
@@ -65,11 +59,16 @@ export default function UsersEditForm({ store }: { store?: Store<Users> }) {
             required
             minLength={8}
             value={row.password || ""}
-            onChange={(e) => handleChange("password", e.target.value)}
+            onChange={(e) => store.setValue("password", e.target.value)}
             placeholder="Minimum 8 characters"
           />
         </div>
       )}
     </div>
   );
+}
+
+export default function UsersEditForm({ store }: { store?: Store<Users> }) {
+  if (!store) return null;
+  return <UsersEditFormInner store={store} />;
 }

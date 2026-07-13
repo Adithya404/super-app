@@ -1,4 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { formatDateOnly } from "@/lib/common/date";
 import type { Users } from "@/lib/common/ds/types/admin/Users";
 import { ActionsCell } from "../components/actions-cell";
 
@@ -11,7 +12,7 @@ export function getColumns(handlers: { onEdit: (user: Users) => void }): ColumnD
       header: "Email Verified",
       cell: ({ row }) => {
         const value = row.getValue("emailverified") as string | null | undefined;
-        return value ? new Date(value).toLocaleDateString() : "—";
+        return formatDateOnly(value);
       },
     },
     {

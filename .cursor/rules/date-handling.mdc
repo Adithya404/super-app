@@ -1,0 +1,30 @@
+---
+description: Date handling and timezone safety
+globs: "**/*.ts,**/*.tsx"
+alwaysApply: false
+---
+
+# Date Handling
+
+`new Date('YYYY-MM-DD')` is UTC midnight and can shift the calendar day in western timezones when formatted locally.
+
+Prefer helpers from `@/lib/common/date`:
+
+```typescript
+import { formatDateOnly, formatDateTime, parseDateLocal, toDateInputValue } from "@/lib/common/date";
+
+formatDateOnly(row.startDate);           // table cells (date-only, UTC)
+formatDateTime(row.expires);             // datetimes
+toDateInputValue(row.startDate);         // <input type="date">
+parseDateLocal(e.target.value);          // write local calendar date into store
+```
+
+```typescript
+// ❌ May show previous day
+new Date("2025-05-11").toLocaleDateString("en-US");
+
+// ✅
+formatDateOnly("2025-05-11");
+```
+
+Use UTC (`formatDateOnly`) for date-only DB values. Use `parseDateLocal` when the user picked a local calendar date in a form.

@@ -1,5 +1,5 @@
 import type { Roles } from "@/lib/common/ds/types/admin/Roles";
-import { useStore as useBaseStore } from "@/lib/common/store/use-store";
+import { useStore as useBaseStore } from "@/lib/common/store";
 
 export function useStore() {
   return useBaseStore<Roles>({

@@ -4,25 +4,18 @@
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { parseDateLocal, toDateInputValue } from "@/lib/common/date";
 import type { Roles } from "@/lib/common/ds/types/admin/Roles";
-import type { Store } from "@/lib/common/store/types";
+import { type Store, useCurrentRowSync } from "@/lib/common/store";
 
-export default function RolesEditForm({ store }: { store?: Store<Roles> }) {
-  // Get the active transient row if we are in "Add New" mode
-  const row = store?.currentRow;
+function RolesEditFormInner({ store }: { store: Store<Roles> }) {
+  const row = useCurrentRowSync(store);
 
-  if (!row || !store) {
+  if (!row) {
     return null;
   }
 
-  // Since we are only supporting Add New via Dialog currently, it's not from DB.
   const fromDB = row._status !== "I";
-
-  const handleChange = (field: string, value: string) => {
-    if (row._cid) {
-      store.updateRow(row._cid, { [field]: value });
-    }
-  };
 
   return (
     <div className="grid gap-4 py-2">
@@ -32,7 +25,7 @@ export default function RolesEditForm({ store }: { store?: Store<Roles> }) {
           id="roleCode"
           disabled={fromDB}
           value={row.roleCode || ""}
-          onChange={(e) => handleChange("roleCode", e.target.value)}
+          onChange={(e) => store.setValue("roleCode", e.target.value)}
         />
       </div>
 
@@ -44,7 +37,7 @@ export default function RolesEditForm({ store }: { store?: Store<Roles> }) {
           id="role"
           required
           value={row.role || ""}
-          onChange={(e) => handleChange("role", e.target.value)}
+          onChange={(e) => store.setValue("role", e.target.value)}
         />
       </div>
 
@@ -53,7 +46,7 @@ export default function RolesEditForm({ store }: { store?: Store<Roles> }) {
         <Input
           id="app"
           value={row.app || ""}
-          onChange={(e) => handleChange("app", e.target.value)}
+          onChange={(e) => store.setValue("app", e.target.value)}
           placeholder="super-app"
         />
       </div>
@@ -63,8 +56,10 @@ export default function RolesEditForm({ store }: { store?: Store<Roles> }) {
         <Input
           id="startDate"
           type="date"
-          value={row.startDate ? new Date(row.startDate).toISOString().split("T")[0] : ""}
-          onChange={(e) => handleChange("startDate", e.target.value)}
+          value={toDateInputValue(row.startDate)}
+          onChange={(e) =>
+            store.setValue("startDate", e.target.value ? parseDateLocal(e.target.value) : undefined)
+          }
         />
       </div>
 
@@ -73,8 +68,10 @@ export default function RolesEditForm({ store }: { store?: Store<Roles> }) {
         <Input
           id="endDate"
           type="date"
-          value={row.endDate ? new Date(row.endDate).toISOString().split("T")[0] : ""}
-          onChange={(e) => handleChange("endDate", e.target.value)}
+          value={toDateInputValue(row.endDate)}
+          onChange={(e) =>
+            store.setValue("endDate", e.target.value ? parseDateLocal(e.target.value) : undefined)
+          }
         />
       </div>
 
@@ -83,9 +80,14 @@ export default function RolesEditForm({ store }: { store?: Store<Roles> }) {
         <Input
           id="description"
           value={row.description || ""}
-          onChange={(e) => handleChange("description", e.target.value)}
+          onChange={(e) => store.setValue("description", e.target.value)}
         />
       </div>
     </div>
   );
+}
+
+export default function RolesEditForm({ store }: { store?: Store<Roles> }) {
+  if (!store) return null;
+  return <RolesEditFormInner store={store} />;
 }

@@ -1,0 +1,80 @@
+---
+description: Super-app development guidelines (stack, imports, data fetching)
+alwaysApply: true
+---
+
+# Super-App Development Guidelines
+
+Expert TypeScript / React 19 / Next.js App Router engineer for this codebase.
+
+## Stack
+
+- **Framework**: Next.js (App Router)
+- **Language**: TypeScript (strict)
+- **UI**: Shadcn / Radix / Tailwind CSS v4
+- **State**: Local `useStore` (valtio) in `@/lib/common/store` — prefer over ad-hoc `useState` for DataSource CRUD
+- **Lint/Format**: Biome
+- **Package manager**: pnpm only
+
+## Imports
+
+```typescript
+// Store + hooks
+import { useStore, useDBRows, useCurrentRowSync, useIsStoreDirty } from "@/lib/common/store";
+
+// Types
+import type { Store, Row } from "@/lib/common/store";
+import type { Users } from "@/lib/common/ds/types/admin/Users";
+
+// UI
+import { Button } from "@/components/ui/button";
+import { PageLayoutTemplate } from "@/components/layout/common/PageLayoutTemplate";
+```
+
+Use `@/` for all `src/` imports. Prefer named exports.
+
+## Code Style
+
+- Functional components; early returns
+- `interface` for extendable objects; `type` for unions
+- No TypeScript enums — use `as const` maps
+- Handlers named `handleClick`, `handleSave`, etc.
+- Descriptive booleans: `isLoading`, `hasError`, `canSubmit`
+
+## Data Fetching Decision Tree
+
+1. **`useStore` + DataSource** — CRUD, lists, filters, pagination
+2. **Server actions / custom logic** — aggregations, multi-table reports
+3. **API routes (`route.ts`)** — webhooks, streaming, public endpoints only
+
+See `.cursor/rules/store-pattern.mdc` and skill `super-app-data-patterns`.
+
+## Page Layout
+
+```
+src/app/(secure)/module/feature/
+├── page.tsx
+├── page-content.tsx
+├── hooks/
+│   ├── use-store.ts
+│   └── table-columns.tsx
+└── components/
+    └── edit-form.tsx
+```
+
+## Don'ts
+
+- Don't use `npm` / `yarn` — use `pnpm`
+- Don't create CSS files for components — Tailwind only
+- Don't read `store.rows()` / `store.currentRow` during render — use hooks
+- Don't call `executeQuery()` / `refresh()` after `save()` on the same store
+- Don't initialize dialog stores in `useEffect` — call `createNew` / `setCurrentRow` before open
+- Don't use `any` unless unavoidable
+- Don't leave TODOs / placeholders in committed code
+
+## Before Commit
+
+```bash
+pnpm typecheck
+pnpm check
+```

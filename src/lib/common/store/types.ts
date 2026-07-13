@@ -4,7 +4,8 @@ import type { QueryFiltersInput } from "../ds/filters";
 import type { Query } from "../ds/query-builder";
 import type { StoreOptions } from "../ds/types";
 
-export type RecordStatus = "I" | "U" | "D" | "N";
+/** Q = queried, I = insert, U = update, D = delete, N = local-only (won't save) */
+export type RecordStatus = "Q" | "I" | "U" | "D" | "N";
 
 export type Row<T> = T & {
   _cid?: string;
@@ -13,7 +14,7 @@ export type Row<T> = T & {
   _id?: string;
 };
 export type NewRow<T> = Partial<T> & { _cid?: string; _status?: RecordStatus };
-export type DBRow<T> = T & { _id?: string };
+export type DBRow<T> = T & { _id?: string; _status?: "Q" | "U" | "D" };
 
 export interface ExecuteQueryOptions<T extends object = Record<string, unknown>> {
   query?: Query<T>;
@@ -29,6 +30,7 @@ export interface StoreState<T extends object = Record<string, unknown>> {
   dbRows: Row<T>[];
   localRows: Row<T>[];
   originalRows: Record<string, Row<T>>;
+  currentRowId: string | null;
   count: number;
   error: string | null;
 }
@@ -45,6 +47,7 @@ export interface Store<T extends object = Record<string, unknown>> {
   datasourceId: string;
   options: StoreOptions<T>;
   currentRow: Row<T> | null;
+  key: string;
 
   getState(): StoreState<T>;
 
@@ -60,6 +63,9 @@ export interface Store<T extends object = Record<string, unknown>> {
   }): string;
 
   updateRow(id: string, partialRecord: Partial<T>, skipDirty?: boolean): void;
+  setValue<K extends keyof T>(key: K, value: T[K] | undefined, rowId?: string): void;
+  setCurrentRow(row: Row<T> | null): void;
+  setCurrentRowId(rowId: string | null): void;
 
   beginEdit?(record: Row<T>): string;
 
@@ -86,7 +92,6 @@ export interface Store<T extends object = Record<string, unknown>> {
   displayName?: string;
   filterLocally?: boolean;
   ignorePKDuplicate?: boolean;
-  key?: string;
   limit?: number;
   localStore?: boolean;
   page?: string;
@@ -97,4 +102,6 @@ export interface Store<T extends object = Record<string, unknown>> {
   deleteRow?: (id: string) => Promise<void>;
   isRowFromDB?: (id?: string) => boolean;
   rowId?: (row: Row<T>) => string;
+  list?: () => Row<T>[];
+  currentRowId?: () => string;
 }

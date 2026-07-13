@@ -1,0 +1,47 @@
+---
+description: Table column definitions for store-backed lists
+globs: src/**/table-columns.tsx, src/**/use-table-columns.tsx
+alwaysApply: false
+---
+
+# Table Columns Pattern
+
+For simple tables where `row.original` is the full entity (current DataTable), accessor columns are fine:
+
+```typescript
+import type { ColumnDef } from "@tanstack/react-table";
+import type { Users } from "@/lib/common/ds/types/admin/Users";
+
+export function getColumns(handlers: {
+  onEdit: (user: Users) => void;
+}): ColumnDef<Users>[] {
+  return [
+    { accessorKey: "name", header: "Name" },
+    { accessorKey: "email", header: "Email" },
+    {
+      id: "actions",
+      cell: ({ row }) => (
+        <ActionsCell user={row.original} onEdit={handlers.onEdit} />
+      ),
+    },
+  ];
+}
+```
+
+## When using store-reactive cells
+
+If a cell must re-render when a single field changes without remounting the row, prefer `useRowValue`:
+
+```typescript
+import { useRowValue } from "@/lib/common/store";
+import type { Store } from "@/lib/common/store";
+
+function NameCell({ store, rowId }: { store: Store<Users>; rowId: string }) {
+  const name = useRowValue(store, rowId, "name");
+  return <span>{name ?? "—"}</span>;
+}
+```
+
+## Dates
+
+Format date-only values with UTC or local-parse helpers — see `date-handling.mdc`. Avoid `new Date('YYYY-MM-DD').toLocaleDateString()` without timezone care.

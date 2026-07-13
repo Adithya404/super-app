@@ -1,10 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /** biome-ignore-all lint/suspicious/noExplicitAny: store row typing */
+import { toast } from "sonner";
 import { proxy } from "valtio";
 import type { QueryFiltersInput } from "../ds/filters";
 import type { Query } from "../ds/query-builder";
 import { mergeQueryFilters, normalizeQuery } from "../ds/query-builder";
 import type { StoreOptions } from "../ds/types";
+import { getStoreKey, setCachedStore } from "./store-cache";
 import type {
   DBRow,
   ExecuteQueryOptions,
@@ -25,6 +27,7 @@ type ChildStoreEntry = {
 
 export class DataStore<T extends object = any> implements Store<T> {
   readonly datasourceId: string;
+  readonly key: string;
   options: StoreOptions<T>;
 
   private readonly _state: StoreState<T>;
@@ -33,15 +36,18 @@ export class DataStore<T extends object = any> implements Store<T> {
   constructor(options: StoreOptions<T>) {
     this.options = options;
     this.datasourceId = options.datasourceId;
+    this.key = getStoreKey(options);
     this._state = proxy<StoreState<T>>({
       isLoading: false,
       isPosting: false,
       dbRows: [],
       localRows: [],
       originalRows: {},
+      currentRowId: null,
       count: 0,
       error: null,
     });
+    setCachedStore(this.key, this);
   }
 
   getState = (): StoreState<T> => this._state;
@@ -63,22 +69,64 @@ export class DataStore<T extends object = any> implements Store<T> {
   }
 
   get currentRow(): Row<T> | null {
-    return this._state.localRows.length > 0 ? this._state.localRows[0] : null;
+    const id = this._state.currentRowId;
+    if (!id) {
+      return this._state.localRows.length > 0 ? this._state.localRows[0] : null;
+    }
+    return this.findRow(id);
   }
+
+  get alias(): string | undefined {
+    return this.options.alias;
+  }
+
+  get page(): string | undefined {
+    return this.options.page;
+  }
+
+  get autoQuery(): boolean | undefined {
+    return this.options.autoQuery;
+  }
+
+  get limit(): number | undefined {
+    return this.options.limit;
+  }
+
+  findRow = (id: string): Row<T> | null => {
+    const local = this._state.localRows.find((row) => this.rowId(row) === id);
+    if (local) return local;
+    const db = this._state.dbRows.find((row) => this.rowId(row) === id);
+    return db ?? null;
+  };
 
   rowId = (row: Row<T>): string => row._cid ?? (row._id as string | undefined) ?? "";
 
   list = (): Row<T>[] => this.data;
 
-  currentRowId = (): string => {
-    const row = this.currentRow;
-    return row ? this.rowId(row) : "";
+  currentRowId = (): string => this._state.currentRowId ?? "";
+
+  setCurrentRowId = (rowId: string | null): void => {
+    this._state.currentRowId = rowId;
+  };
+
+  setCurrentRow = (row: Row<T> | null): void => {
+    if (!row) {
+      this._state.currentRowId = null;
+      return;
+    }
+    const id = this.rowId(row);
+    const existing = this.findRow(id);
+    if (!existing) {
+      this.beginEdit(row);
+      return;
+    }
+    this._state.currentRowId = id;
   };
 
   originalRows = (): Record<string, Row<T>> => this._state.originalRows;
 
   isDirtyStatus = (status?: RecordStatus): boolean => {
-    if (!status || status === "N") {
+    if (!status || status === "N" || status === "Q") {
       return false;
     }
     return status === "I" || status === "U" || status === "D";
@@ -115,6 +163,13 @@ export class DataStore<T extends object = any> implements Store<T> {
 
   isReadonly = (): boolean => !this.isUpdatable() && !this.isInsertable() && !this.isDeletable();
 
+  isRowFromDB = (id?: string): boolean => {
+    if (!id) return false;
+    const row = this.findRow(id);
+    if (!row) return false;
+    return row._status === "Q" || row._status === "U" || row._status === "D" || Boolean(row._id);
+  };
+
   confirm = async (): Promise<boolean> =>
     window.confirm("You have unsaved changes. Discard them and refresh?");
 
@@ -124,11 +179,13 @@ export class DataStore<T extends object = any> implements Store<T> {
     }
 
     if (!this.isStoreDirty() && !this.hasNewRows()) {
+      this._state.currentRowId = null;
       return;
     }
 
     this._state.localRows = [];
     this._state.originalRows = {};
+    this._state.currentRowId = null;
   };
 
   getFilters = (): QueryFiltersInput<T> => this.options.filters ?? [];
@@ -229,7 +286,12 @@ export class DataStore<T extends object = any> implements Store<T> {
       if (handleResponse) {
         handleResponse(rows);
       } else {
-        this._state.dbRows = rows as Row<T>[];
+        this._state.dbRows = rows.map((row) => {
+          const id =
+            (row as Row<T>)._id ??
+            String((row as Record<string, unknown>).id ?? crypto.randomUUID());
+          return { ...row, _id: id, _status: "Q" as const } as Row<T>;
+        });
         this._state.count = result.count ?? 0;
       }
 
@@ -281,32 +343,117 @@ export class DataStore<T extends object = any> implements Store<T> {
     await this.refresh(force ?? true);
   };
 
-  createNew = ({ partialRecord = {} }: { partialRecord?: NewRow<T> } = {}): string => {
-    const _cid = crypto.randomUUID();
-    const newRow = { ...partialRecord, _cid, _status: "I" as RecordStatus };
-    this._state.localRows = [newRow as Row<T>, ...this._state.localRows];
+  createNew = ({
+    partialRecord = {},
+    status = "I",
+    cid,
+  }: {
+    partialRecord?: NewRow<T>;
+    addOnTop?: boolean;
+    addAfter?: string;
+    cid?: string;
+    status?: RecordStatus;
+  } = {}): string => {
+    const _cid = cid ?? crypto.randomUUID();
+    const newRow = { ...partialRecord, _cid, _status: status } as Row<T>;
+    this._state.localRows = [newRow, ...this._state.localRows];
+    this._state.currentRowId = _cid;
     return _cid;
   };
 
-  updateRow = (_cid: string, updates: Partial<T>): void => {
-    this._state.localRows = this._state.localRows.map((row) =>
-      row._cid === _cid ? { ...row, ...updates } : row,
-    );
+  updateRow = (id: string, updates: Partial<T>, skipDirty = false): void => {
+    const apply = (row: Row<T>): Row<T> => {
+      if (this.rowId(row) !== id) return row;
+      const nextStatus =
+        skipDirty || row._status === "I" || row._status === "N"
+          ? row._status
+          : ("U" as RecordStatus);
+      return { ...row, ...updates, _status: nextStatus };
+    };
+
+    const inLocal = this._state.localRows.some((row) => this.rowId(row) === id);
+    if (inLocal) {
+      this._state.localRows = this._state.localRows.map(apply);
+      return;
+    }
+
+    const dbRow = this._state.dbRows.find((row) => this.rowId(row) === id);
+    if (!dbRow) return;
+
+    // Promote DB row into local edit buffer
+    const idKey = this.rowId(dbRow);
+    if (!this._state.originalRows[idKey]) {
+      this._state.originalRows = { ...this._state.originalRows, [idKey]: { ...dbRow } };
+    }
+    const edited = apply(dbRow);
+    this._state.localRows = [edited, ...this._state.localRows];
+    this._state.dbRows = this._state.dbRows.filter((row) => this.rowId(row) !== id);
+    this._state.currentRowId = this.rowId(edited);
+  };
+
+  setValue = <K extends keyof T>(key: K, value: T[K] | undefined, rowId?: string): void => {
+    const id = rowId ?? this.currentRowId();
+    if (!id) {
+      throw new Error(`Cannot set value for '${String(key)}': no current row in store ${this.key}`);
+    }
+    this.updateRow(id, { [key]: value } as Partial<T>);
   };
 
   beginEdit = (record: Row<T>): string => {
     const _cid = crypto.randomUUID();
     const id = this.rowId(record);
     const { _cid: _omitCid, _status: _omitStatus, _orig: _omitOrig, ...rest } = record;
-    const editRow = { ...rest, _cid, _status: "U" as RecordStatus, _orig: { ...rest } };
+    const editRow = {
+      ...rest,
+      _cid,
+      _status: "U" as RecordStatus,
+      _orig: { ...rest },
+      _id: id || undefined,
+    };
     this._state.localRows = [editRow as Row<T>];
     if (id) {
       this._state.originalRows = { ...this._state.originalRows, [id]: record };
     }
+    this._state.currentRowId = _cid;
     return _cid;
   };
 
-  save = async (): Promise<boolean> => {
+  deleteFromStore = (id: string): void => {
+    this._state.localRows = this._state.localRows.filter((row) => this.rowId(row) !== id);
+    this._state.dbRows = this._state.dbRows.filter((row) => this.rowId(row) !== id);
+    const { [id]: _removed, ...rest } = this._state.originalRows;
+    this._state.originalRows = rest;
+    if (this._state.currentRowId === id) {
+      this._state.currentRowId = null;
+    }
+  };
+
+  deleteRow = async (id: string): Promise<void> => {
+    const row = this.findRow(id);
+    if (!row) return;
+
+    if (this.isRowFromDB(id) && row._status !== "I" && row._status !== "N") {
+      if (!this._state.originalRows[id]) {
+        this._state.originalRows = { ...this._state.originalRows, [id]: { ...row } };
+      }
+      const inLocal = this._state.localRows.some((r) => this.rowId(r) === id);
+      if (inLocal) {
+        this._state.localRows = this._state.localRows.map((r) =>
+          this.rowId(r) === id ? { ...r, _status: "D" as RecordStatus } : r,
+        );
+      } else {
+        this._state.localRows = [
+          { ...row, _status: "D" as RecordStatus },
+          ...this._state.localRows,
+        ];
+        this._state.dbRows = this._state.dbRows.filter((r) => this.rowId(r) !== id);
+      }
+    } else {
+      this.deleteFromStore(id);
+    }
+  };
+
+  save = async (params?: { silent?: boolean; feedback?: "NONE" | string }): Promise<boolean> => {
     const dirtyRecords = this.dirtyRows();
     if (dirtyRecords.length === 0) {
       return true;
@@ -327,9 +474,16 @@ export class DataStore<T extends object = any> implements Store<T> {
 
       this.resetStore();
       await this.fetchData();
+
+      if (!params?.silent && params?.feedback !== "NONE") {
+        toast.success(params?.feedback ?? `${dirtyRecords.length} row(s) saved`);
+      }
       return true;
     } catch (err) {
       console.error("Save error:", err);
+      if (!params?.silent && params?.feedback !== "NONE") {
+        toast.error(err instanceof Error ? err.message : "Failed to save");
+      }
       return false;
     } finally {
       this._state.isPosting = false;
