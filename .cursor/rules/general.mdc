@@ -72,9 +72,13 @@ src/app/(secure)/module/feature/
 - Don't use `any` unless unavoidable
 - Don't leave TODOs / placeholders in committed code
 
-## Before Commit
+## After Every Edit
 
 ```bash
+pnpm exec biome check --write <changed paths>
 pnpm typecheck
-pnpm check
 ```
+
+Then `pnpm check` and `pnpm typecheck` must both pass repo-wide before reporting work
+complete. See skill `super-app-verify-changes` for the rules that fail most often and
+for handling files written by the shadcn / ai-elements CLI.

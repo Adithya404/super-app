@@ -6,16 +6,19 @@ import {
   streamText,
   tool,
   toUIMessageStream,
-  type UIMessage,
 } from "ai";
 import { z } from "zod";
+import { CHAT_MODEL_ID, type ChatUIMessage } from "./types";
+
+export type { ChatMessageMetadata, ChatUIMessage } from "./types";
+export { CHAT_MAX_TOKENS, CHAT_MODEL_ID } from "./types";
 
 export async function POST(req: Request) {
-  const { messages }: { messages: UIMessage[] } = await req.json();
+  const { messages }: { messages: ChatUIMessage[] } = await req.json();
 
   const result = streamText({
     // model: groq("openai/gpt-oss-20b"),
-    model: groq("llama-3.3-70b-versatile"),
+    model: groq(CHAT_MODEL_ID),
     messages: await convertToModelMessages(messages),
     stopWhen: isStepCount(5),
     tools: {
@@ -50,6 +53,17 @@ export async function POST(req: Request) {
   });
 
   return createUIMessageStreamResponse({
-    stream: toUIMessageStream({ stream: result.stream }),
+    stream: toUIMessageStream({
+      stream: result.stream,
+      originalMessages: messages,
+      messageMetadata: ({ part }) => {
+        if (part.type === "finish") {
+          return {
+            modelId: `groq:${CHAT_MODEL_ID}`,
+            totalUsage: part.totalUsage,
+          };
+        }
+      },
+    }),
   });
 }
