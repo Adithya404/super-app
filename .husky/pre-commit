@@ -1,3 +1,6 @@
-pnpm format
+# Format staged files only, then re-stage so lint-staged does not see partial diffs.
+pnpm exec biome format --write --staged --no-errors-on-unmatched
+git update-index --again
+
 pnpm lint-staged
 pnpm typecheck

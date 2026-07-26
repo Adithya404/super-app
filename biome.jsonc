@@ -8,6 +8,10 @@
     "useIgnoreFile": true
   },
 
+  "files": {
+    "includes": ["**", "!.agents", "!.claude", "!.cursor"]
+  },
+
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
@@ -67,6 +71,7 @@
     }
   },
   "css": {
+    "parser": { "tailwindDirectives": true },
     "formatter": { "enabled": false },
     "linter": { "enabled": false }
   }
