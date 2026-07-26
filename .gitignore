@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 
+# AI SDK DevTools (local interaction capture)
+.devtools
+
 # debug
 npm-debug.log*
 yarn-debug.log*
