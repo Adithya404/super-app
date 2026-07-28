@@ -1,12 +1,11 @@
-import type { LanguageModelUsage, UIMessage } from "ai";
+/**
+ * Chat API types — re-exported from `@/lib/ai` so existing imports keep working.
+ * Prefer importing from `@/lib/ai` in new code.
+ */
 
-export const CHAT_MODEL_ID = "llama-3.3-70b-versatile";
-/** Context window size for llama-3.3-70b-versatile on Groq */
-export const CHAT_MAX_TOKENS = 128_000;
-
-export type ChatMessageMetadata = {
-  modelId?: string;
-  totalUsage?: LanguageModelUsage;
-};
-
-export type ChatUIMessage = UIMessage<ChatMessageMetadata>;
+export type {
+  BasicAgentUIMessage,
+  ChatMessageMetadata,
+  ChatUIMessage,
+} from "@/lib/ai/agents/basic-agent";
+export { CHAT_MAX_TOKENS, CHAT_MODEL_ID } from "@/lib/ai/models";

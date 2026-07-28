@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import type { BundledLanguage } from "shiki";
-import type { ChatUIMessage } from "@/app/api/chat/types";
 import {
   Artifact,
   ArtifactContent,
@@ -58,6 +57,7 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
+import type { ChatUIMessage } from "@/lib/ai";
 
 const TOOL_ICONS: Record<string, LucideIcon> = {
   weather: CloudIcon,
