@@ -1,16 +1,16 @@
 import type { AppConfig } from ".";
 import { adminModules } from "./adminModules";
 
-export const tpApp: AppConfig = {
-  key: "tp",
-  name: "Tours & Patrols",
-  abbr: "T&P",
+export const sbApp: AppConfig = {
+  key: "sb",
+  name: "Sabre",
+  abbr: "SB",
   color: "#6366f1",
-  basePath: "/tp",
+  basePath: "/sb",
   modules: [
     {
-      title: "Tours & Patrols",
-      modulePath: "/tp",
+      title: "Sabre",
+      modulePath: "/sb",
       pageGroups: [
         {
           title: "Configuration",
@@ -19,9 +19,9 @@ export const tpApp: AppConfig = {
           isExpanded: true,
           pages: [
             {
-              title: "Break Policy Template",
-              pagePath: "/break-policies",
-              icon: "Coffee",
+              title: "Chat",
+              pagePath: "/chat",
+              icon: "MessageSquare",
               roles: ["tour_admin", "regional_admin", "site_supervisor"],
               hidden: false,
             },

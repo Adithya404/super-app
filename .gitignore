@@ -27,6 +27,9 @@
 # AI SDK DevTools (local interaction capture)
 .devtools
 
+# Local file-based chat persistence
+.chats
+
 # debug
 npm-debug.log*
 yarn-debug.log*

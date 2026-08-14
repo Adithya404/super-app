@@ -44,7 +44,7 @@ export default function AuthPage() {
       return;
     }
 
-    router.push("/(secure)/tp/");
+    router.push("/sb");
   }
 
   // ── REGISTER HANDLER (commented out — may be re-enabled later) ──────────────
@@ -150,7 +150,7 @@ export default function AuthPage() {
               type="button"
               variant="outline"
               className="flex w-full items-center justify-center gap-2"
-              onClick={() => signIn("google", { callbackUrl: "/tp" })}
+              onClick={() => signIn("google", { callbackUrl: "/sb" })}
             >
               {/* Inline Google "G" SVG — no new dependencies */}
               {/* <svg

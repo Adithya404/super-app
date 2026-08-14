@@ -1,7 +1,7 @@
 import { ppApp } from "./pp";
-import { tpApp } from "./tp";
+import { sbApp } from "./sb";
 
-export const apps = [tpApp, ppApp];
+export const apps = [sbApp, ppApp];
 
 // Auto-generate the base paths for proxy matcher — no manual updates needed
 export const appBasePaths = Array.from(

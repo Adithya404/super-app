@@ -41,7 +41,7 @@ interface TableInfo {
 
 const MODULES = [
   { label: "Pingpal", value: "pp" },
-  { label: "Tour Pal", value: "tp" },
+  { label: "Sabre", value: "sb" },
   { label: "Asset Management", value: "am" },
   { label: "HR", value: "hr" },
   { label: "Admin", value: "admin" },
@@ -53,7 +53,7 @@ const SUB_MODULES: Record<string, { label: string; value: string }[]> = {
     { label: "Users", value: "users" },
     { label: "System", value: "system" },
   ],
-  tp: [{ label: "Config", value: "config" }],
+  sb: [{ label: "Config", value: "config" }],
 };
 
 export default function CodeGeneratePage() {
