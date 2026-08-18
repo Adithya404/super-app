@@ -20,10 +20,11 @@ export function assertValidChatId(id: string): void {
   }
 }
 
-export async function createChat(): Promise<string> {
-  const id = generateId();
-  await writeFile(getChatFile(id), "[]");
-  return id;
+export async function createChat(id?: string): Promise<string> {
+  const chatId = id ?? generateId();
+  assertValidChatId(chatId);
+  await writeFile(getChatFile(chatId), "[]");
+  return chatId;
 }
 
 function getChatFile(id: string): string {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { getToolName, isToolUIPart } from "ai";
+import { generateId, getToolName, isToolUIPart } from "ai";
 import type { LucideIcon } from "lucide-react";
 import {
   CloudIcon,
@@ -11,7 +11,8 @@ import {
   ThermometerIcon,
   WrenchIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import type { BundledLanguage } from "shiki";
 import {
   Artifact,
@@ -58,6 +59,10 @@ import {
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
 import type { ChatUIMessage } from "@/lib/ai";
+import { createChatSession } from "./actions";
+import { ChatWelcome } from "./components/chat-welcome";
+
+const PENDING_MESSAGE_KEY = "sb-chat-pending-message";
 
 const TOOL_ICONS: Record<string, LucideIcon> = {
   weather: CloudIcon,
@@ -308,28 +313,60 @@ function ToolResultArtifact({
 }
 
 interface ChatProps {
-  chatId: string;
-  initialMessages: ChatUIMessage[];
+  chatId?: string;
+  initialMessages?: ChatUIMessage[];
+  isNewChat?: boolean;
 }
 
-export default function Chat({ chatId, initialMessages }: ChatProps) {
+export default function Chat({ chatId, initialMessages = [], isNewChat = false }: ChatProps) {
+  const router = useRouter();
   const [input, setInput] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
   const { messages, sendMessage, status, stop } = useChat<ChatUIMessage>({
-    id: chatId,
+    ...(chatId ? { id: chatId } : {}),
     messages: initialMessages,
   });
 
-  const handleSubmit = (message: PromptInputMessage) => {
-    if (!message.text.trim()) return;
+  useEffect(() => {
+    const pending = sessionStorage.getItem(PENDING_MESSAGE_KEY);
+    if (!pending || !chatId) return;
+
+    sessionStorage.removeItem(PENDING_MESSAGE_KEY);
+    sendMessage({ text: pending });
+  }, [chatId, sendMessage]);
+
+  const handleSubmit = async (message: PromptInputMessage) => {
+    if (!message.text.trim() || isCreating) return;
+
+    if (!chatId) {
+      setIsCreating(true);
+      try {
+        const newId = generateId();
+        await createChatSession(newId);
+        sessionStorage.setItem(PENDING_MESSAGE_KEY, message.text);
+        router.replace(`/sb/config/chat/${newId}`);
+      } finally {
+        setIsCreating(false);
+      }
+      return;
+    }
+
     sendMessage({ text: message.text });
     setInput("");
   };
+
+  const showWelcome = isNewChat && messages.length === 0;
+  const showEmptyState = !isNewChat && messages.length === 0;
+  const isSubmitDisabled =
+    isCreating || (status === "ready" && !input.trim()) || status === "submitted";
 
   return (
     <div className="mx-auto flex h-[calc(100dvh-4rem)] w-full max-w-2xl flex-col p-4">
       <Conversation className="relative min-h-0 flex-1">
         <ConversationContent>
-          {messages.length === 0 ? (
+          {showWelcome ? (
+            <ChatWelcome onSuggestionClick={setInput} />
+          ) : showEmptyState ? (
             <ConversationEmptyState
               description="Ask about weather or anything else to begin."
               icon={<MessageSquareIcon className="size-6" />}
@@ -415,9 +452,9 @@ export default function Chat({ chatId, initialMessages }: ChatProps) {
         <PromptInputFooter>
           <PromptInputTools />
           <PromptInputSubmit
-            disabled={status === "ready" && !input.trim()}
+            disabled={isSubmitDisabled}
             onStop={stop}
-            status={status}
+            status={isCreating ? "submitted" : status}
           />
         </PromptInputFooter>
       </PromptInput>

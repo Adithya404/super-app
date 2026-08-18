@@ -1,7 +1,5 @@
-import { redirect } from "next/navigation";
-import { createChat } from "@/lib/ai";
+import Chat from "./page-content";
 
-export default async function Page() {
-  const id = await createChat();
-  redirect(`/sb/config/chat/${id}`);
+export default function Page() {
+  return <Chat isNewChat />;
 }
