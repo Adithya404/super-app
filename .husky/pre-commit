@@ -4,3 +4,4 @@ git update-index --again
 
 pnpm lint-staged
 pnpm typecheck
+pnpm format
