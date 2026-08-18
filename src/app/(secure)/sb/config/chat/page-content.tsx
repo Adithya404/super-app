@@ -307,9 +307,17 @@ function ToolResultArtifact({
   );
 }
 
-export default function Chat() {
+interface ChatProps {
+  chatId: string;
+  initialMessages: ChatUIMessage[];
+}
+
+export default function Chat({ chatId, initialMessages }: ChatProps) {
   const [input, setInput] = useState("");
-  const { messages, sendMessage, status, stop } = useChat<ChatUIMessage>();
+  const { messages, sendMessage, status, stop } = useChat<ChatUIMessage>({
+    id: chatId,
+    messages: initialMessages,
+  });
 
   const handleSubmit = (message: PromptInputMessage) => {
     if (!message.text.trim()) return;

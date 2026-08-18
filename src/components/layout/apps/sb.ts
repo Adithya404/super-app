@@ -22,7 +22,7 @@ export const sbApp: AppConfig = {
               title: "Chat",
               pagePath: "/chat",
               icon: "MessageSquare",
-              roles: ["tour_admin", "regional_admin", "site_supervisor"],
+              roles: ["admin"],
               hidden: false,
             },
           ],

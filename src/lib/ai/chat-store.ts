@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { generateId } from "ai";
+import type { ChatUIMessage } from "@/lib/ai/agents/basic-agent";
 
 // Treat chat IDs as opaque tokens before using them in file paths.
 const chatIdRegex = /^[A-Za-z0-9_-]+$/;
@@ -30,4 +31,8 @@ function getChatFile(id: string): string {
   }
 
   return chatFile;
+}
+
+export async function loadChat(id: string): Promise<ChatUIMessage[]> {
+  return JSON.parse(await readFile(getChatFile(id), "utf8"));
 }
