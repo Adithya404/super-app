@@ -383,7 +383,7 @@ export default function Chat({
             <ChatWelcome onSuggestionClick={setInput} />
           ) : showEmptyState ? (
             <ConversationEmptyState
-              description="Ask about weather or anything else to begin."
+              description="Ask anything or search the web for the latest info."
               icon={<MessageSquareIcon className="size-6" />}
               title="Start a conversation"
             />

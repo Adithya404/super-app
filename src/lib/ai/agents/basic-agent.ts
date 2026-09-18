@@ -8,6 +8,9 @@ export type ChatMessageMetadata = {
   totalUsage?: LanguageModelUsage;
 };
 
+/** Tools the model may call. Weather tools stay registered but disabled here. */
+const ACTIVE_AGENT_TOOLS = ["browser_search"] as const;
+
 export const basicAgent = new ToolLoopAgent({
   model: getModelForRole("chat-default"),
   instructions: `You are Sabre, the AI assistant for the Sabre module in this application.
@@ -21,6 +24,7 @@ After browser_search returns, always reply with a clear natural-language answer 
     convertFahrenheitToCelsius,
     browser_search: browserSearch,
   },
+  activeTools: [...ACTIVE_AGENT_TOOLS],
   toolsContext: {
     getWeather: {
       apiKey: "",

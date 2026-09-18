@@ -1,20 +1,20 @@
 "use client";
 
-import { CloudIcon, MessageSquareIcon, SparklesIcon, WrenchIcon } from "lucide-react";
+import { MessageSquareIcon, NewspaperIcon, SearchIcon, SparklesIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const WELCOME_SUGGESTIONS = [
   {
-    icon: CloudIcon,
-    label: "Weather in San Francisco",
-    prompt: "What's the weather in San Francisco?",
+    icon: SearchIcon,
+    label: "Search the latest news",
+    prompt: "What are the top tech headlines today?",
   },
   {
-    icon: WrenchIcon,
-    label: "Convert temperature",
-    prompt: "Convert 72°F to Celsius",
+    icon: NewspaperIcon,
+    label: "Look up a current topic",
+    prompt: "What's happening with AI right now?",
   },
   {
     icon: SparklesIcon,
@@ -56,7 +56,7 @@ export function ChatWelcome({ onSuggestionClick, className }: ChatWelcomeProps) 
 
         <h2 className="mt-4 font-semibold text-2xl tracking-tight">Welcome to Sabre</h2>
         <p className="mt-3 max-w-sm text-muted-foreground text-sm leading-relaxed">
-          Your AI assistant for weather lookups, tool-powered answers, and everyday tasks. Send a
+          Your AI assistant with live web search for current information and everyday tasks. Send a
           message below or try a suggestion to get started.
         </p>
 
