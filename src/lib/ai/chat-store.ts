@@ -1,3 +1,4 @@
+import { generateId } from "ai";
 import type { ChatUIMessage } from "@/lib/ai/agents/basic-agent";
 import { sabrePool } from "@/lib/db";
 
@@ -302,15 +303,18 @@ export async function saveChat({
     await client.query("UPDATE sb_chat SET updated_at = NOW() WHERE chat_id = $1", [chatId]);
 
     for (const message of messages) {
+      const messageId = message.id?.trim() ? message.id : generateId();
+
       await client.query(
         `INSERT INTO sb_chat_message (message_id, chat_id, role, parts, metadata)
          VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (message_id) DO UPDATE
-         SET role = EXCLUDED.role,
+         SET chat_id = EXCLUDED.chat_id,
+             role = EXCLUDED.role,
              parts = EXCLUDED.parts,
              metadata = EXCLUDED.metadata`,
         [
-          message.id,
+          messageId,
           chatId,
           message.role,
           JSON.stringify(message.parts),

@@ -1,4 +1,4 @@
-import { createAgentUIStreamResponse } from "ai";
+import { createAgentUIStreamResponse, generateId } from "ai";
 import { auth } from "@/auth";
 import { basicAgent, type ChatUIMessage } from "@/lib/ai";
 import { postChatRequestSchema } from "@/lib/ai/chat-schema";
@@ -87,6 +87,7 @@ export async function POST(req: Request) {
     agent: basicAgent,
     uiMessages,
     originalMessages: uiMessages,
+    generateMessageId: generateId,
     options: {
       requestId: id,
       escalated: false,
