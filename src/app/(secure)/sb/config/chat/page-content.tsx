@@ -376,9 +376,9 @@ export default function Chat({
     isCreating || (status === "ready" && !input.trim()) || status === "submitted";
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-2xl flex-col p-4">
-      <Conversation className="relative min-h-0 flex-1">
-        <ConversationContent>
+    <div className="relative h-full min-h-0 w-full">
+      <Conversation key={chatId ?? "new"} className="absolute inset-0" initial="instant">
+        <ConversationContent className="mx-auto w-full max-w-3xl px-4 pt-4 pb-36 md:px-6">
           {showWelcome ? (
             <ChatWelcome onSuggestionClick={setInput} />
           ) : showEmptyState ? (
@@ -456,26 +456,30 @@ export default function Chat({
             })
           )}
         </ConversationContent>
-        <ConversationScrollButton />
+        <ConversationScrollButton className="bottom-28" />
       </Conversation>
 
-      <PromptInput className="mt-4 shrink-0" onSubmit={handleSubmit}>
-        <PromptInputBody>
-          <PromptInputTextarea
-            onChange={(e) => setInput(e.currentTarget.value)}
-            placeholder="Say something..."
-            value={input}
-          />
-        </PromptInputBody>
-        <PromptInputFooter>
-          <PromptInputTools />
-          <PromptInputSubmit
-            disabled={isSubmitDisabled}
-            onStop={stop}
-            status={isCreating ? "submitted" : status}
-          />
-        </PromptInputFooter>
-      </PromptInput>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-background via-background to-transparent pt-10">
+        <div className="pointer-events-auto mx-auto w-full max-w-3xl px-4 pb-4 md:px-6">
+          <PromptInput onSubmit={handleSubmit}>
+            <PromptInputBody>
+              <PromptInputTextarea
+                onChange={(e) => setInput(e.currentTarget.value)}
+                placeholder="Say something..."
+                value={input}
+              />
+            </PromptInputBody>
+            <PromptInputFooter>
+              <PromptInputTools />
+              <PromptInputSubmit
+                disabled={isSubmitDisabled}
+                onStop={stop}
+                status={isCreating ? "submitted" : status}
+              />
+            </PromptInputFooter>
+          </PromptInput>
+        </div>
+      </div>
     </div>
   );
 }
