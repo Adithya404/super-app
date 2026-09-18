@@ -9,9 +9,10 @@ import { Button } from "../ui/button";
 type TopbarProps = {
   appName: string;
   pageName: string;
+  trailSegment?: string | null;
 };
 
-export default function Topbar({ appName, pageName }: TopbarProps) {
+export default function Topbar({ appName, pageName, trailSegment }: TopbarProps) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -21,10 +22,24 @@ export default function Topbar({ appName, pageName }: TopbarProps) {
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-border border-b bg-background px-4">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-1.5 text-sm">
-        <span className="text-muted-foreground">{appName}</span>
-        <ChevronRight size={13} className="text-muted-foreground/40" />
-        <span className="font-medium text-foreground">{pageName}</span>
+      <div className="flex min-w-0 items-center gap-1.5 text-sm">
+        <span className="shrink-0 text-muted-foreground">{appName}</span>
+        <ChevronRight size={13} className="shrink-0 text-muted-foreground/40" />
+        <span
+          className={
+            trailSegment ? "shrink-0 text-muted-foreground" : "font-medium text-foreground"
+          }
+        >
+          {pageName}
+        </span>
+        {trailSegment ? (
+          <>
+            <ChevronRight size={13} className="shrink-0 text-muted-foreground/40" />
+            <span className="truncate font-medium text-foreground" title={trailSegment}>
+              {trailSegment}
+            </span>
+          </>
+        ) : null}
       </div>
 
       {/* Actions */}

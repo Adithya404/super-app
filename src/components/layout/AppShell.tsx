@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import type { Team } from "@/lib/sidebar/types";
 import { cn } from "@/lib/utils";
+import { BreadcrumbTrailProvider, useBreadcrumbTrail } from "./breadcrumb-trail";
 import Sidebar from "./Sidebar";
 import { SidebarSlotProvider, useSidebarSlot } from "./sidebar-slot";
 import Topbar from "./Topbar";
@@ -25,6 +26,7 @@ function AppShellInner({ children, hideSidebar }: Pick<AppShellProps, "children"
   const pathname = usePathname();
   const { activeTeam } = useTeamContext();
   const { sidebar: slotSidebar } = useSidebarSlot();
+  const { trailSegment } = useBreadcrumbTrail();
   const leftSidebar = slotSidebar ?? (!hideSidebar ? <Sidebar /> : null);
 
   // Find the active page title
@@ -62,7 +64,11 @@ function AppShellInner({ children, hideSidebar }: Pick<AppShellProps, "children"
       {leftSidebar}
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <Topbar appName={activeTeam?.name ?? "Super Portal"} pageName={activePageName} />
+        <Topbar
+          appName={activeTeam?.name ?? "Super Portal"}
+          pageName={activePageName}
+          trailSegment={trailSegment}
+        />
         <main className={cn("flex-1", slotSidebar ? "overflow-hidden" : "overflow-y-auto")}>
           {children}
         </main>
@@ -75,7 +81,9 @@ export default function AppShell(props: AppShellProps) {
   return (
     <TeamProvider teams={props.teams ?? []}>
       <SidebarSlotProvider>
-        <AppShellInner hideSidebar={props.hideSidebar}>{props.children}</AppShellInner>
+        <BreadcrumbTrailProvider>
+          <AppShellInner hideSidebar={props.hideSidebar}>{props.children}</AppShellInner>
+        </BreadcrumbTrailProvider>
       </SidebarSlotProvider>
     </TeamProvider>
   );

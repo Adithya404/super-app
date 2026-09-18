@@ -1,6 +1,12 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { assertChatOwner, ChatAccessDeniedError, ChatNotFoundError, loadChat } from "@/lib/ai";
+import {
+  assertChatOwner,
+  ChatAccessDeniedError,
+  ChatNotFoundError,
+  getChatMeta,
+  loadChat,
+} from "@/lib/ai";
 import Chat from "../page-content";
 
 interface ChatPageProps {
@@ -17,8 +23,10 @@ export default async function Page({ params }: ChatPageProps) {
 
   try {
     await assertChatOwner(id, session.user.id);
-    const initialMessages = await loadChat(id);
-    return <Chat chatId={id} initialMessages={initialMessages} />;
+    const [initialMessages, meta] = await Promise.all([loadChat(id), getChatMeta(id)]);
+    return (
+      <Chat chatId={id} initialMessages={initialMessages} initialTitle={meta?.title ?? null} />
+    );
   } catch (error) {
     if (error instanceof ChatNotFoundError || error instanceof ChatAccessDeniedError) {
       notFound();

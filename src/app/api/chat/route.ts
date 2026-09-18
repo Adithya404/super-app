@@ -7,12 +7,26 @@ import {
   assertValidChatId,
   ChatAccessDeniedError,
   ChatNotFoundError,
+  getChatMeta,
   loadChat,
   saveChat,
+  updateChatTitle,
 } from "@/lib/ai/chat-store";
+import {
+  fallbackTitleFromPrompt,
+  generateTitleFromUserMessage,
+} from "@/lib/ai/generate-chat-title";
 
 export type { ChatMessageMetadata, ChatUIMessage } from "@/lib/ai";
 export { CHAT_MAX_TOKENS, CHAT_MODEL_ID } from "@/lib/ai";
+
+function extractTextFromParts(parts: ChatUIMessage["parts"]): string {
+  return parts
+    .filter((part): part is { type: "text"; text: string } => part.type === "text")
+    .map((part) => part.text)
+    .join("\n")
+    .trim();
+}
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -57,6 +71,10 @@ export async function POST(req: Request) {
     throw error;
   }
 
+  const meta = await getChatMeta(id);
+  const needsTitle = !meta?.title;
+  const incomingText = extractTextFromParts(message.parts as ChatUIMessage["parts"]);
+
   const incomingMessage: ChatUIMessage = {
     id: message.id,
     role: message.role,
@@ -77,8 +95,15 @@ export async function POST(req: Request) {
         accountId: "acct_123",
       },
     },
-    onFinish: ({ messages: finalMessages }) => {
-      void saveChat({ chatId: id, messages: finalMessages });
+    onFinish: async ({ messages: finalMessages }) => {
+      await saveChat({ chatId: id, messages: finalMessages });
+
+      if (needsTitle && incomingText) {
+        const title =
+          (await generateTitleFromUserMessage(incomingText)) ||
+          fallbackTitleFromPrompt(incomingText);
+        await updateChatTitle(id, title);
+      }
     },
   });
 }

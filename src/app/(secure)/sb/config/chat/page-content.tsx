@@ -50,8 +50,10 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
+import { useBreadcrumbTrail } from "@/components/layout/breadcrumb-trail";
 import type { ChatUIMessage } from "@/lib/ai";
-import { createChatSession } from "./actions";
+import { createChatSession, getChatTitle } from "./actions";
+import { revalidateChatHistory } from "./chat-history-keys";
 import { ChatWelcome } from "./components/chat-welcome";
 import { getArtifactFilename, getToolUI } from "./components/tool-ui-registry";
 
@@ -239,13 +241,25 @@ function ToolResultArtifact({
 interface ChatProps {
   chatId?: string;
   initialMessages?: ChatUIMessage[];
+  initialTitle?: string | null;
   isNewChat?: boolean;
 }
 
-export default function Chat({ chatId, initialMessages = [], isNewChat = false }: ChatProps) {
+export default function Chat({
+  chatId,
+  initialMessages = [],
+  initialTitle = null,
+  isNewChat = false,
+}: ChatProps) {
   const router = useRouter();
+  const { setTrailSegment } = useBreadcrumbTrail();
   const [input, setInput] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+
+  useEffect(() => {
+    setTrailSegment(isNewChat || !chatId ? null : initialTitle);
+    return () => setTrailSegment(null);
+  }, [chatId, initialTitle, isNewChat, setTrailSegment]);
 
   const transport = useMemo(
     () =>
@@ -275,6 +289,16 @@ export default function Chat({ chatId, initialMessages = [], isNewChat = false }
     ...(chatId ? { id: chatId } : {}),
     messages: initialMessages,
     transport,
+    onFinish: async () => {
+      await revalidateChatHistory();
+      if (!chatId) {
+        return;
+      }
+      const title = await getChatTitle(chatId);
+      if (title) {
+        setTrailSegment(title);
+      }
+    },
   });
 
   useEffect(() => {
@@ -311,7 +335,7 @@ export default function Chat({ chatId, initialMessages = [], isNewChat = false }
     isCreating || (status === "ready" && !input.trim()) || status === "submitted";
 
   return (
-    <div className="mx-auto flex h-[calc(100dvh-4rem)] w-full max-w-2xl flex-col p-4">
+    <div className="mx-auto flex h-full w-full max-w-2xl flex-col p-4">
       <Conversation className="relative min-h-0 flex-1">
         <ConversationContent>
           {showWelcome ? (
