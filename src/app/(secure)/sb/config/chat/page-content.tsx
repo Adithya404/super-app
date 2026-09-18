@@ -1,18 +1,10 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { generateId, getToolName, isToolUIPart } from "ai";
-import type { LucideIcon } from "lucide-react";
-import {
-  CloudIcon,
-  FileIcon,
-  MessageSquareIcon,
-  SearchIcon,
-  ThermometerIcon,
-  WrenchIcon,
-} from "lucide-react";
+import { DefaultChatTransport, generateId, getToolName, isToolUIPart } from "ai";
+import { FileIcon, MessageSquareIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { BundledLanguage } from "shiki";
 import {
   Artifact,
@@ -61,14 +53,9 @@ import {
 import type { ChatUIMessage } from "@/lib/ai";
 import { createChatSession } from "./actions";
 import { ChatWelcome } from "./components/chat-welcome";
+import { getArtifactFilename, getToolUI } from "./components/tool-ui-registry";
 
 const PENDING_MESSAGE_KEY = "sb-chat-pending-message";
-
-const TOOL_ICONS: Record<string, LucideIcon> = {
-  weather: CloudIcon,
-  convertFahrenheitToCelsius: ThermometerIcon,
-  browser_search: SearchIcon,
-};
 
 function getToolStepStatus(state: string): "complete" | "active" | "pending" {
   if (state === "output-available" || state === "output-error" || state === "output-denied") {
@@ -78,44 +65,6 @@ function getToolStepStatus(state: string): "complete" | "active" | "pending" {
     return "active";
   }
   return "pending";
-}
-
-function getToolLabel(name: string, input: unknown): string {
-  if (!input || typeof input !== "object") {
-    return `Using ${name}`;
-  }
-
-  const data = input as Record<string, unknown>;
-
-  switch (name) {
-    case "weather":
-      return typeof data.location === "string"
-        ? `Getting weather for ${data.location}`
-        : "Getting weather...";
-    case "convertFahrenheitToCelsius":
-      return typeof data.temperature === "number"
-        ? `Converting ${data.temperature}°F to Celsius`
-        : "Converting temperature...";
-    case "browser_search":
-      return typeof data.query === "string"
-        ? `Searching for "${data.query}"`
-        : "Searching the web...";
-    default:
-      return `Using ${name}`;
-  }
-}
-
-function getArtifactTitle(name: string): string {
-  switch (name) {
-    case "weather":
-      return "Weather result";
-    case "convertFahrenheitToCelsius":
-      return "Temperature conversion";
-    case "browser_search":
-      return "Search result";
-    default:
-      return `${name} result`;
-  }
 }
 
 type CodeLanguage = "json" | "typescript" | "python" | "yaml";
@@ -147,32 +96,6 @@ function renderToolOutput(output: unknown) {
       <ChainOfThoughtSearchResult>{String(output)}</ChainOfThoughtSearchResult>
     </ChainOfThoughtSearchResults>
   );
-}
-
-function getArtifactFilename(name: string, language: CodeLanguage): string {
-  const base = (() => {
-    switch (name) {
-      case "weather":
-        return "weather";
-      case "convertFahrenheitToCelsius":
-        return "conversion";
-      case "browser_search":
-        return "search";
-      default:
-        return name;
-    }
-  })();
-
-  switch (language) {
-    case "typescript":
-      return `${base}.ts`;
-    case "python":
-      return `${base}.py`;
-    case "yaml":
-      return `${base}.yaml`;
-    default:
-      return `${base}.json`;
-  }
 }
 
 function toPythonLiteral(value: unknown, indent = 0): string {
@@ -266,12 +189,13 @@ function ToolResultArtifact({
   const [language, setLanguage] = useState<CodeLanguage>("json");
   const examples = formatCodeExamples(output);
   const code = examples[language];
+  const toolUI = getToolUI(name);
 
   return (
     <Artifact>
       <ArtifactHeader>
         <div>
-          <ArtifactTitle>{getArtifactTitle(name)}</ArtifactTitle>
+          <ArtifactTitle>{toolUI.artifactTitle}</ArtifactTitle>
           <ArtifactDescription>{description}</ArtifactDescription>
         </div>
       </ArtifactHeader>
@@ -322,9 +246,35 @@ export default function Chat({ chatId, initialMessages = [], isNewChat = false }
   const router = useRouter();
   const [input, setInput] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport<ChatUIMessage>({
+        prepareSendMessagesRequest({ id, messages }) {
+          const message = messages.at(-1);
+          if (!message || message.role !== "user") {
+            throw new Error("Expected a user message to send");
+          }
+
+          return {
+            body: {
+              id,
+              message: {
+                id: message.id,
+                role: message.role,
+                parts: message.parts,
+              },
+            },
+          };
+        },
+      }),
+    [],
+  );
+
   const { messages, sendMessage, status, stop } = useChat<ChatUIMessage>({
     ...(chatId ? { id: chatId } : {}),
     messages: initialMessages,
+    transport,
   });
 
   useEffect(() => {
@@ -389,14 +339,15 @@ export default function Chat({ chatId, initialMessages = [], isNewChat = false }
                         <ChainOfThoughtContent>
                           {toolParts.map((part) => {
                             const name = getToolName(part);
-                            const Icon = TOOL_ICONS[name] ?? WrenchIcon;
+                            const toolUI = getToolUI(name);
+                            const Icon = toolUI.icon;
                             const stepStatus = getToolStepStatus(part.state);
 
                             return (
                               <ChainOfThoughtStep
                                 key={part.toolCallId}
                                 icon={Icon}
-                                label={getToolLabel(name, part.input)}
+                                label={toolUI.getLabel(part.input)}
                                 status={stepStatus}
                                 description={
                                   part.state === "output-error" ? part.errorText : undefined
@@ -423,11 +374,12 @@ export default function Chat({ chatId, initialMessages = [], isNewChat = false }
                     {toolParts.map((part) => {
                       if (part.state !== "output-available") return null;
                       const name = getToolName(part);
+                      const toolUI = getToolUI(name);
                       return (
                         <ToolResultArtifact
                           key={`${part.toolCallId}-artifact`}
                           name={name}
-                          description={getToolLabel(name, part.input)}
+                          description={toolUI.getLabel(part.input)}
                           output={part.output}
                         />
                       );

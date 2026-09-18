@@ -1,10 +1,6 @@
-import { existsSync, mkdirSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { generateId } from "ai";
 import type { ChatUIMessage } from "@/lib/ai/agents/basic-agent";
+import { sabrePool } from "@/lib/db";
 
-// Treat chat IDs as opaque tokens before using them in file paths.
 const chatIdRegex = /^[A-Za-z0-9_-]+$/;
 
 export class ChatNotFoundError extends Error {
@@ -14,54 +10,85 @@ export class ChatNotFoundError extends Error {
   }
 }
 
+export class ChatAccessDeniedError extends Error {
+  constructor(id: string) {
+    super(`Access denied for chat: ${id}`);
+    this.name = "ChatAccessDeniedError";
+  }
+}
+
 export function assertValidChatId(id: string): void {
   if (!chatIdRegex.test(id)) {
     throw new Error("Invalid chat ID");
   }
 }
 
-export async function createChat(id?: string): Promise<string> {
-  const chatId = id ?? generateId();
+export async function createChat(chatId: string, userId: string): Promise<string> {
   assertValidChatId(chatId);
-  await writeFile(getChatFile(chatId), "[]");
+
+  await sabrePool.query(
+    `INSERT INTO sb_chat (chat_id, user_id)
+     VALUES ($1, $2)
+     ON CONFLICT (chat_id) DO NOTHING`,
+    [chatId, userId],
+  );
+
   return chatId;
 }
 
-function getChatFile(id: string): string {
-  assertValidChatId(id);
+export async function getChatOwner(chatId: string): Promise<string | null> {
+  assertValidChatId(chatId);
 
-  const chatDir = path.resolve(process.cwd(), ".chats");
-  const chatFile = path.resolve(chatDir, `${id}.json`);
+  const { rows } = await sabrePool.query<{ user_id: string }>(
+    "SELECT user_id FROM sb_chat WHERE chat_id = $1",
+    [chatId],
+  );
 
-  // Defense in depth: keep the resolved file inside the chat directory.
-  if (!chatFile.startsWith(`${chatDir}${path.sep}`)) {
-    throw new Error("Invalid chat ID");
-  }
-
-  if (!existsSync(chatDir)) {
-    mkdirSync(chatDir, { recursive: true });
-  }
-
-  return chatFile;
+  return rows[0]?.user_id ?? null;
 }
 
-export async function loadChat(id: string): Promise<ChatUIMessage[]> {
-  try {
-    const content = await readFile(getChatFile(id), "utf8");
-    const parsed: unknown = JSON.parse(content);
+export async function assertChatOwner(chatId: string, userId: string): Promise<void> {
+  const owner = await getChatOwner(chatId);
 
-    if (!Array.isArray(parsed)) {
-      throw new Error("Invalid chat file format");
-    }
-
-    return parsed as ChatUIMessage[];
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-      throw new ChatNotFoundError(id);
-    }
-
-    throw error;
+  if (!owner) {
+    throw new ChatNotFoundError(chatId);
   }
+
+  if (owner !== userId) {
+    throw new ChatAccessDeniedError(chatId);
+  }
+}
+
+export async function loadChat(chatId: string): Promise<ChatUIMessage[]> {
+  assertValidChatId(chatId);
+
+  const chatResult = await sabrePool.query("SELECT chat_id FROM sb_chat WHERE chat_id = $1", [
+    chatId,
+  ]);
+
+  if (chatResult.rowCount === 0) {
+    throw new ChatNotFoundError(chatId);
+  }
+
+  const { rows } = await sabrePool.query<{
+    message_id: string;
+    role: string;
+    parts: ChatUIMessage["parts"];
+    metadata: ChatUIMessage["metadata"] | null;
+  }>(
+    `SELECT message_id, role, parts, metadata
+     FROM sb_chat_message
+     WHERE chat_id = $1
+     ORDER BY created_at ASC`,
+    [chatId],
+  );
+
+  return rows.map((row) => ({
+    id: row.message_id,
+    role: row.role as ChatUIMessage["role"],
+    parts: row.parts,
+    ...(row.metadata ? { metadata: row.metadata } : {}),
+  }));
 }
 
 export async function saveChat({
@@ -71,6 +98,38 @@ export async function saveChat({
   chatId: string;
   messages: ChatUIMessage[];
 }): Promise<void> {
-  const content = JSON.stringify(messages, null, 2);
-  await writeFile(getChatFile(chatId), content);
+  assertValidChatId(chatId);
+
+  const client = await sabrePool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    await client.query("UPDATE sb_chat SET updated_at = NOW() WHERE chat_id = $1", [chatId]);
+
+    for (const message of messages) {
+      await client.query(
+        `INSERT INTO sb_chat_message (message_id, chat_id, role, parts, metadata)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (message_id) DO UPDATE
+         SET role = EXCLUDED.role,
+             parts = EXCLUDED.parts,
+             metadata = EXCLUDED.metadata`,
+        [
+          message.id,
+          chatId,
+          message.role,
+          JSON.stringify(message.parts),
+          message.metadata ? JSON.stringify(message.metadata) : null,
+        ],
+      );
+    }
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }

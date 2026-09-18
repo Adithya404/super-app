@@ -1,7 +1,6 @@
-import { groq } from "@ai-sdk/groq";
 import { type InferAgentUIMessage, type LanguageModelUsage, ToolLoopAgent } from "ai";
 import { z } from "zod";
-import { CHAT_MODEL_ID } from "@/lib/ai/models";
+import { getModelForRole } from "@/lib/ai/models";
 import { convertFahrenheitToCelsius, getWeather } from "@/lib/ai/tools";
 
 export type ChatMessageMetadata = {
@@ -10,7 +9,7 @@ export type ChatMessageMetadata = {
 };
 
 export const basicAgent = new ToolLoopAgent({
-  model: groq(CHAT_MODEL_ID),
+  model: getModelForRole("chat-default"),
   instructions: `You are Sabre, the AI assistant for the Sabre module in this application.
 When asked your name, who you are, or what you are called, answer that you are Sabre.
 Do not say you are ChatGPT, Claude, or a generic OpenAI assistant unless the user explicitly asks about the underlying model.
