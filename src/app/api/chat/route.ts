@@ -95,6 +95,9 @@ export async function POST(req: Request) {
         apiKey: "1234567890",
         accountId: "acct_123",
       },
+      browser_search: {
+        apiKey: process.env.TAVILY_API_KEY ?? "",
+      },
     },
     onFinish: async ({ messages: finalMessages }) => {
       await saveChat({ chatId: id, messages: finalMessages });

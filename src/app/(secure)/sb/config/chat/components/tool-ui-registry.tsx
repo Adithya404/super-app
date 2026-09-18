@@ -6,6 +6,8 @@ export interface ToolUIConfig {
   getLabel: (input: unknown) => string;
   artifactTitle: string;
   artifactBaseName: string;
+  /** When false, hide the raw JSON/code artifact under the message. Default true. */
+  showArtifact?: boolean;
 }
 
 const defaultToolUI: ToolUIConfig = {
@@ -18,6 +20,7 @@ const defaultToolUI: ToolUIConfig = {
   },
   artifactTitle: "Tool result",
   artifactBaseName: "result",
+  showArtifact: true,
 };
 
 export const toolUIRegistry: Record<string, ToolUIConfig> = {
@@ -62,6 +65,7 @@ export const toolUIRegistry: Record<string, ToolUIConfig> = {
     },
     artifactTitle: "Search result",
     artifactBaseName: "search",
+    showArtifact: false,
   },
 };
 

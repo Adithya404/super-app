@@ -78,8 +78,49 @@ const CODE_LANGUAGES: { value: CodeLanguage; label: string }[] = [
   { label: "YAML", value: "yaml" },
 ];
 
+type SearchResultItem = {
+  title?: string;
+  url?: string;
+  snippet?: string;
+};
+
+function isSearchToolOutput(
+  output: unknown,
+): output is { answer?: string | null; results?: SearchResultItem[] } {
+  return (
+    !!output &&
+    typeof output === "object" &&
+    "results" in output &&
+    Array.isArray((output as { results: unknown }).results)
+  );
+}
+
 function renderToolOutput(output: unknown) {
   if (output == null) return null;
+
+  if (isSearchToolOutput(output)) {
+    const items = output.results ?? [];
+    if (items.length === 0) return null;
+
+    return (
+      <ChainOfThoughtSearchResults>
+        {items.slice(0, 5).map((result, index) => {
+          const label = result.title || result.url || `Result ${index + 1}`;
+          return (
+            <ChainOfThoughtSearchResult key={result.url ?? `${label}-${index}`}>
+              {result.url ? (
+                <a href={result.url} rel="noreferrer" target="_blank">
+                  {label}
+                </a>
+              ) : (
+                label
+              )}
+            </ChainOfThoughtSearchResult>
+          );
+        })}
+      </ChainOfThoughtSearchResults>
+    );
+  }
 
   if (typeof output === "object") {
     return (
@@ -399,6 +440,7 @@ export default function Chat({
                       if (part.state !== "output-available") return null;
                       const name = getToolName(part);
                       const toolUI = getToolUI(name);
+                      if (toolUI.showArtifact === false) return null;
                       return (
                         <ToolResultArtifact
                           key={`${part.toolCallId}-artifact`}

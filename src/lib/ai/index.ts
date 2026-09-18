@@ -29,4 +29,4 @@ export {
   generateTitleFromUserMessage,
 } from "@/lib/ai/generate-chat-title";
 export { CHAT_MAX_TOKENS, CHAT_MODEL_ID, getModelForRole, type ModelRole } from "@/lib/ai/models";
-export { convertFahrenheitToCelsius, getWeather } from "@/lib/ai/tools";
+export { browserSearch, convertFahrenheitToCelsius, getWeather } from "@/lib/ai/tools";
