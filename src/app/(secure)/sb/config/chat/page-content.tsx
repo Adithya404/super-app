@@ -55,6 +55,7 @@ import type { ChatUIMessage } from "@/lib/ai";
 import { createChatSession, getChatTitle } from "./actions";
 import { revalidateChatHistory } from "./chat-history-keys";
 import { ChatWelcome } from "./components/chat-welcome";
+import { RoamingMascot } from "./components/roaming-mascot";
 import { getArtifactFilename, getToolUI } from "./components/tool-ui-registry";
 
 const PENDING_MESSAGE_KEY = "sb-chat-pending-message";
@@ -377,6 +378,7 @@ export default function Chat({
 
   return (
     <div className="relative h-full min-h-0 w-full">
+      {showWelcome && <RoamingMascot />}
       <Conversation key={chatId ?? "new"} className="absolute inset-0" initial="instant">
         <ConversationContent className="mx-auto w-full max-w-3xl px-4 pt-4 pb-36 md:px-6">
           {showWelcome ? (

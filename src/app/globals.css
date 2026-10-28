@@ -189,3 +189,90 @@
     @apply mx-auto max-w-7xl px-6;
   }
 }
+
+/* -------------------------------- */
+/* Mascot Animations                */
+/* -------------------------------- */
+
+@keyframes cub-leg-swing {
+  0%,
+  100% {
+    transform: rotate(22deg);
+  }
+  50% {
+    transform: rotate(-22deg);
+  }
+}
+
+@keyframes cub-tail-wag {
+  0%,
+  100% {
+    transform: rotate(-6deg);
+  }
+  50% {
+    transform: rotate(12deg);
+  }
+}
+
+@keyframes cub-body-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2.5px);
+  }
+}
+
+@keyframes cub-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.025);
+  }
+}
+
+@keyframes cub-head-bob {
+  0%,
+  100% {
+    transform: rotate(-2deg);
+  }
+  50% {
+    transform: rotate(3deg);
+  }
+}
+
+@keyframes cub-blink {
+  0%,
+  90%,
+  100% {
+    transform: scaleY(1);
+  }
+  93%,
+  96% {
+    transform: scaleY(0.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mascot-animated * {
+    animation: none !important;
+  }
+}
+
+@keyframes mascot-jump {
+  0% {
+    transform: translateY(0) scale(1, 1);
+  }
+  30% {
+    transform: translateY(4px) scale(1.1, 0.85);
+  }
+  60% {
+    transform: translateY(-26px) scale(0.95, 1.08);
+  }
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+}
