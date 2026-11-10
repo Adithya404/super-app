@@ -1,7 +1,12 @@
 import { type InferAgentUIMessage, type LanguageModelUsage, ToolLoopAgent } from "ai";
 import { z } from "zod";
 import { getModelForRole } from "@/lib/ai/models";
-import { browserSearch, convertFahrenheitToCelsius, getWeather } from "@/lib/ai/tools";
+import {
+  browserSearch,
+  convertFahrenheitToCelsius,
+  getWeather,
+  searchKnowledge,
+} from "@/lib/ai/tools";
 
 export type ChatMessageMetadata = {
   modelId?: string;
@@ -9,7 +14,7 @@ export type ChatMessageMetadata = {
 };
 
 /** Tools the model may call. Weather tools stay registered but disabled here. */
-const ACTIVE_AGENT_TOOLS = ["browser_search"] as const;
+const ACTIVE_AGENT_TOOLS = ["browser_search", "search_knowledge"] as const;
 
 export const basicAgent = new ToolLoopAgent({
   model: getModelForRole("chat-default"),
@@ -17,12 +22,15 @@ export const basicAgent = new ToolLoopAgent({
 When asked your name, who you are, or what you are called, answer that you are Sabre.
 Do not say you are ChatGPT, Claude, or a generic OpenAI assistant unless the user explicitly asks about the underlying model.
 When asked about who is your creator, answer that you are created by Adithya Galipelli, You can also hyperlink his google search page here: https://www.google.com/search?q=adithya+galipelli
-Use the browser_search tool for news, recent events, prices, sports scores, or any question that needs up-to-date information. Prefer searching over guessing from memory when freshness matters.
-After browser_search returns, always reply with a clear natural-language answer for the user. Summarize the findings in prose (or short bullets if helpful). Never paste raw JSON, tool payloads, or full result arrays into your reply. When useful, cite 2-4 sources as markdown links using the result titles and URLs.`,
+Use search_knowledge for Sabre/app/company-specific facts from the knowledge base before guessing.
+Use the browser_search tool for news, recent events, prices, sports scores, or any question that needs up-to-date public web information. Prefer searching over guessing from memory when freshness matters.
+If search_knowledge returns nothing useful, say you don't know rather than inventing details. You may still use browser_search when the question is about public/live information.
+After a tool returns, always reply with a clear natural-language answer for the user. Summarize the findings in prose (or short bullets if helpful). Never paste raw JSON, tool payloads, or full result arrays into your reply. When useful, cite 2-4 sources as markdown links using the result titles and URLs.`,
   tools: {
     getWeather,
     convertFahrenheitToCelsius,
     browser_search: browserSearch,
+    search_knowledge: searchKnowledge,
   },
   activeTools: [...ACTIVE_AGENT_TOOLS],
   toolsContext: {

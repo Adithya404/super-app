@@ -19,5 +19,6 @@ export const pingpalPool = new Pool({
 
 export const sabrePool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  options: "-c search_path=sabre",
+  // Include public so pgvector types/operators resolve for RAG queries.
+  options: "-c search_path=sabre,public",
 });

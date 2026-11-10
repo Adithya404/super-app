@@ -4,6 +4,7 @@ import {
   Activity,
   BadgeCheck,
   BarChart3,
+  BookOpen,
   Calendar,
   ChevronDown,
   ClipboardList,
@@ -35,6 +36,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ChatHistoryPanel } from "@/app/(secure)/sb/config/chat/components/chat-sidebar";
+import { KnowledgeBaseDialog } from "@/app/(secure)/sb/config/chat/components/knowledge-base-dialog";
 import { Button } from "../ui/button";
 import { SidebarUserFooter } from "./SidebarUserFooter";
 import { TeamSwitcher } from "./TeamSwitcher";
@@ -74,6 +76,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { teams, activeTeam, setActiveTeam } = useTeamContext();
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [knowledgeOpen, setKnowledgeOpen] = useState(false);
 
   // Auto-detect active team from pathname
   useEffect(() => {
@@ -221,7 +224,7 @@ export default function Sidebar() {
 
       {isSabreChat ? (
         <>
-          <div className="shrink-0 border-white/8 border-b p-2">
+          <div className="shrink-0 space-y-2 border-white/8 border-b p-2">
             <Button
               asChild
               className="w-full justify-start gap-2 border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white"
@@ -232,7 +235,18 @@ export default function Sidebar() {
                 New Chat
               </Link>
             </Button>
+            <Button
+              type="button"
+              className="w-full justify-start gap-2 border-white/10 bg-transparent text-[#9ba3b2] hover:bg-white/10 hover:text-white"
+              variant="outline"
+              onClick={() => setKnowledgeOpen(true)}
+            >
+              <BookOpen size={16} />
+              Knowledge base
+            </Button>
           </div>
+
+          <KnowledgeBaseDialog open={knowledgeOpen} onOpenChange={setKnowledgeOpen} />
 
           {/* Scrollable chat history window (Command Center pattern) */}
           <ChatHistoryPanel />

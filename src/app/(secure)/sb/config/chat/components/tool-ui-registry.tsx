@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { CloudIcon, SearchIcon, ThermometerIcon, WrenchIcon } from "lucide-react";
+import { BookOpenIcon, CloudIcon, SearchIcon, ThermometerIcon, WrenchIcon } from "lucide-react";
 
 export interface ToolUIConfig {
   icon: LucideIcon;
@@ -65,6 +65,21 @@ export const toolUIRegistry: Record<string, ToolUIConfig> = {
     },
     artifactTitle: "Search result",
     artifactBaseName: "search",
+    showArtifact: false,
+  },
+  search_knowledge: {
+    icon: BookOpenIcon,
+    getLabel: (input) => {
+      if (input && typeof input === "object" && "question" in input) {
+        const question = (input as { question: unknown }).question;
+        if (typeof question === "string") {
+          return `Searching knowledge for "${question}"`;
+        }
+      }
+      return "Searching knowledge base...";
+    },
+    artifactTitle: "Knowledge result",
+    artifactBaseName: "knowledge",
     showArtifact: false,
   },
 };

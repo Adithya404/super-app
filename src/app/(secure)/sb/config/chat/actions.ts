@@ -11,6 +11,13 @@ import {
   setChatVisibility,
   updateChatTitle,
 } from "@/lib/ai/chat-store";
+import {
+  type CreateResourceResult,
+  createResource,
+  deleteResource,
+  type KnowledgeResourceListItem,
+  listResources,
+} from "@/lib/ai/knowledge-store";
 
 async function requireUserId(): Promise<string> {
   const session = await auth();
@@ -69,4 +76,38 @@ export async function deleteChatSession(chatId: string): Promise<void> {
   const userId = await requireUserId();
   assertValidChatId(chatId);
   await deleteChat(chatId, userId);
+}
+
+export async function createKnowledgeResource(input: {
+  title?: string;
+  content: string;
+}): Promise<CreateResourceResult> {
+  const userId = await requireUserId();
+  const content = input.content.trim();
+  if (!content) {
+    throw new Error("Content is required");
+  }
+
+  return createResource({
+    title: input.title,
+    content,
+    createdBy: userId,
+  });
+}
+
+export async function listKnowledgeResources(): Promise<KnowledgeResourceListItem[]> {
+  await requireUserId();
+  return listResources();
+}
+
+export async function deleteKnowledgeResource(resourceId: string): Promise<void> {
+  await requireUserId();
+  const trimmed = resourceId.trim();
+  if (!trimmed) {
+    throw new Error("Resource ID is required");
+  }
+  const deleted = await deleteResource(trimmed);
+  if (!deleted) {
+    throw new Error("Resource not found");
+  }
 }
