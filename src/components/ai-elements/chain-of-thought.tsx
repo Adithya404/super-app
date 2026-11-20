@@ -3,8 +3,8 @@
 import { useControllableState } from "@radix-ui/react-use-controllable-state";
 import type { LucideIcon } from "lucide-react";
 import { BrainIcon, ChevronDownIcon, DotIcon } from "lucide-react";
-import type { ComponentProps, ReactNode } from "react";
-import { createContext, memo, useContext, useMemo } from "react";
+import type { ComponentProps, ReactElement, ReactNode } from "react";
+import { createContext, createElement, isValidElement, memo, useContext, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
@@ -57,10 +57,13 @@ export const ChainOfThought = memo(
   },
 );
 
-export type ChainOfThoughtHeaderProps = ComponentProps<typeof CollapsibleTrigger>;
+export type ChainOfThoughtHeaderProps = ComponentProps<typeof CollapsibleTrigger> & {
+  /** Replaces the default brain icon when set. */
+  leading?: ReactNode;
+};
 
 export const ChainOfThoughtHeader = memo(
-  ({ className, children, ...props }: ChainOfThoughtHeaderProps) => {
+  ({ className, children, leading, ...props }: ChainOfThoughtHeaderProps) => {
     const { isOpen, setIsOpen } = useChainOfThought();
 
     return (
@@ -72,7 +75,7 @@ export const ChainOfThoughtHeader = memo(
           )}
           {...props}
         >
-          <BrainIcon className="size-4" />
+          {leading ?? <BrainIcon className="size-4" />}
           <span className="flex-1 text-left">{children ?? "Chain of Thought"}</span>
           <ChevronDownIcon
             className={cn("size-4 transition-transform", isOpen ? "rotate-180" : "rotate-0")}
@@ -84,7 +87,7 @@ export const ChainOfThoughtHeader = memo(
 );
 
 export type ChainOfThoughtStepProps = ComponentProps<"div"> & {
-  icon?: LucideIcon;
+  icon?: LucideIcon | ReactElement;
   label: ReactNode;
   description?: ReactNode;
   status?: "complete" | "active" | "pending";
@@ -116,7 +119,7 @@ export const ChainOfThoughtStep = memo(
       {...props}
     >
       <div className="relative mt-0.5">
-        <Icon className="size-4" />
+        {isValidElement(Icon) ? Icon : createElement(Icon as LucideIcon, { className: "size-4" })}
         <div className="absolute top-7 bottom-0 left-1/2 -mx-px w-px bg-border" />
       </div>
       <div className="flex-1 space-y-2 overflow-hidden">

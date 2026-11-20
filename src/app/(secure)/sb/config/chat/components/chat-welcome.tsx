@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { SabreCub } from "./sabre-cub";
 
 const WELCOME_SUGGESTIONS = [
   {
@@ -86,9 +85,6 @@ export function ChatWelcome({ onSuggestionClick, className }: ChatWelcomeProps) 
         />
 
         <div className="relative inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 py-1 pr-3 pl-1.5">
-          <span className="flex size-6 items-center justify-center rounded-full bg-indigo-500/15">
-            <SabreCub className="w-5" />
-          </span>
           <span className="font-medium text-indigo-700 text-xs dark:text-indigo-300">Sabre AI</span>
         </div>
 

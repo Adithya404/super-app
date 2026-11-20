@@ -48,7 +48,6 @@ import {
   PromptInputBody,
   PromptInputFooter,
   type PromptInputMessage,
-  PromptInputSubmit,
   PromptInputTextarea,
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
@@ -56,20 +55,24 @@ import { useBreadcrumbTrail } from "@/components/layout/breadcrumb-trail";
 import type { ChatUIMessage } from "@/lib/ai";
 import { createChatSession, getChatTitle } from "./actions";
 import { revalidateChatHistory } from "./chat-history-keys";
+import { ChatPromptSubmit } from "./components/chat-prompt-submit";
+import {
+  ChatThinkingOrb,
+  getOrbStateForToolName,
+  getOrbStateLabel,
+  resolveActiveOrbState,
+  resolveChatOrbState,
+} from "./components/chat-thinking-orb";
 import { ChatWelcome } from "./components/chat-welcome";
-import { RoamingMascot } from "./components/roaming-mascot";
 import { getArtifactFilename, getToolUI } from "./components/tool-ui-registry";
+import { getToolStepStatus } from "./orb-state";
 
 const PENDING_MESSAGE_KEY = "sb-chat-pending-message";
 
-function getToolStepStatus(state: string): "complete" | "active" | "pending" {
-  if (state === "output-available" || state === "output-error" || state === "output-denied") {
-    return "complete";
-  }
-  if (state === "input-streaming" || state === "input-available") {
-    return "active";
-  }
-  return "pending";
+function messageHasVisibleText(message: ChatUIMessage): boolean {
+  return message.parts.some(
+    (part) => part.type === "text" && typeof part.text === "string" && part.text.trim().length > 0,
+  );
 }
 
 type CodeLanguage = "json" | "typescript" | "python" | "yaml";
@@ -379,9 +382,28 @@ export default function Chat({
   const isSubmitDisabled =
     isCreating || (status === "ready" && !input.trim()) || status === "submitted";
 
+  const lastAssistantMessage = [...messages]
+    .reverse()
+    .find((message) => message.role === "assistant");
+  const lastAssistantToolParts = lastAssistantMessage?.parts.filter(isToolUIPart) ?? [];
+  const chatOrbState = resolveChatOrbState({ status, toolParts: lastAssistantToolParts });
+  const isGenerating = status === "submitted" || status === "streaming";
+  const lastMessage = messages.at(-1);
+  const lastMessageToolCount = lastMessage?.parts.filter(isToolUIPart).length ?? 0;
+  const showStandaloneThinkingOrb =
+    isGenerating &&
+    (lastMessage?.role === "user" ||
+      (lastMessage?.role === "assistant" &&
+        !messageHasVisibleText(lastMessage) &&
+        lastMessageToolCount === 0));
+  const showStreamingComposingRow =
+    isGenerating &&
+    lastMessage?.role === "assistant" &&
+    messageHasVisibleText(lastMessage) &&
+    lastMessageToolCount === 0;
+
   return (
     <div className="relative h-full min-h-0 w-full">
-      {showWelcome && <RoamingMascot />}
       <Conversation key={chatId ?? "new"} className="absolute inset-0" initial="instant">
         <ConversationContent className="mx-auto w-full max-w-3xl px-4 pt-4 pb-36 md:px-6">
           {showWelcome ? (
@@ -396,14 +418,28 @@ export default function Chat({
             messages.map((message) => {
               const toolParts = message.parts.filter(isToolUIPart);
               const isLastMessage = message.id === messages.at(-1)?.id;
-              const isWorking = status !== "ready" && isLastMessage;
+              const isWorking = status !== "ready" && isLastMessage && message.role === "assistant";
+              const hasActiveTool = toolParts.some(
+                (part) => getToolStepStatus(part.state) === "active",
+              );
+              const workingOrbState = hasActiveTool
+                ? resolveActiveOrbState(toolParts)
+                : status === "streaming"
+                  ? "composing"
+                  : "working";
 
               return (
                 <Message from={message.role} key={message.id}>
                   <MessageContent>
                     {toolParts.length > 0 && (
                       <ChainOfThought defaultOpen={isWorking}>
-                        <ChainOfThoughtHeader>
+                        <ChainOfThoughtHeader
+                          leading={
+                            isWorking ? (
+                              <ChatThinkingOrb size={20} state={workingOrbState} />
+                            ) : undefined
+                          }
+                        >
                           {isWorking ? "Thinking..." : "Chain of Thought"}
                         </ChainOfThoughtHeader>
                         <ChainOfThoughtContent>
@@ -412,11 +448,18 @@ export default function Chat({
                             const toolUI = getToolUI(name);
                             const Icon = toolUI.icon;
                             const stepStatus = getToolStepStatus(part.state);
+                            const stepOrbState = getOrbStateForToolName(name);
 
                             return (
                               <ChainOfThoughtStep
                                 key={part.toolCallId}
-                                icon={Icon}
+                                icon={
+                                  stepStatus === "active" ? (
+                                    <ChatThinkingOrb size={20} state={stepOrbState} />
+                                  ) : (
+                                    Icon
+                                  )
+                                }
                                 label={toolUI.getLabel(part.input)}
                                 status={stepStatus}
                                 description={
@@ -455,11 +498,28 @@ export default function Chat({
                         />
                       );
                     })}
+
+                    {showStreamingComposingRow && isLastMessage && message.role === "assistant" ? (
+                      <div className="flex items-center gap-2 pt-1 text-muted-foreground text-xs">
+                        <ChatThinkingOrb size={20} state="composing" />
+                        <span>{getOrbStateLabel("composing")}…</span>
+                      </div>
+                    ) : null}
                   </MessageContent>
                 </Message>
               );
             })
           )}
+          {showStandaloneThinkingOrb ? (
+            <Message from="assistant">
+              <MessageContent className="flex-row items-center gap-3 py-1">
+                <ChatThinkingOrb size={64} state={chatOrbState} />
+                <span className="text-muted-foreground text-sm">
+                  {getOrbStateLabel(chatOrbState)}…
+                </span>
+              </MessageContent>
+            </Message>
+          ) : null}
         </ConversationContent>
         <ConversationScrollButton className="bottom-28" />
       </Conversation>
@@ -483,10 +543,12 @@ export default function Chat({
               </PromptInputBody>
               <PromptInputFooter>
                 <PromptInputTools />
-                <PromptInputSubmit
+                <ChatPromptSubmit
+                  chatStatus={status}
                   disabled={isSubmitDisabled}
+                  isCreating={isCreating}
                   onStop={stop}
-                  status={isCreating ? "submitted" : status}
+                  orbState={chatOrbState}
                 />
               </PromptInputFooter>
             </PromptInput>
