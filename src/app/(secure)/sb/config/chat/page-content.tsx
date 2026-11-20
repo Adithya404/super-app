@@ -2,8 +2,10 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, generateId, getToolName, isToolUIPart } from "ai";
+import { BorderBeam } from "border-beam";
 import { FileIcon, MessageSquareIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
 import { useEffect, useMemo, useState } from "react";
 import type { BundledLanguage } from "shiki";
 import {
@@ -294,6 +296,7 @@ export default function Chat({
   isNewChat = false,
 }: ChatProps) {
   const router = useRouter();
+  const { resolvedTheme } = useTheme();
   const { setTrailSegment } = useBreadcrumbTrail();
   const [input, setInput] = useState("");
   const [isCreating, setIsCreating] = useState(false);
@@ -461,25 +464,33 @@ export default function Chat({
         <ConversationScrollButton className="bottom-28" />
       </Conversation>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-background via-background to-transparent pt-10">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-linear-to-t from-background via-background to-transparent pt-10">
         <div className="pointer-events-auto mx-auto w-full max-w-3xl px-4 pb-4 md:px-6">
-          <PromptInput onSubmit={handleSubmit}>
-            <PromptInputBody>
-              <PromptInputTextarea
-                onChange={(e) => setInput(e.currentTarget.value)}
-                placeholder="Say something..."
-                value={input}
-              />
-            </PromptInputBody>
-            <PromptInputFooter>
-              <PromptInputTools />
-              <PromptInputSubmit
-                disabled={isSubmitDisabled}
-                onStop={stop}
-                status={isCreating ? "submitted" : status}
-              />
-            </PromptInputFooter>
-          </PromptInput>
+          <BorderBeam
+            size="md"
+            colorVariant="colorful"
+            strength={0.7}
+            theme={resolvedTheme === "light" ? "light" : "dark"}
+            className="w-full"
+          >
+            <PromptInput onSubmit={handleSubmit}>
+              <PromptInputBody>
+                <PromptInputTextarea
+                  onChange={(e) => setInput(e.currentTarget.value)}
+                  placeholder="Say something..."
+                  value={input}
+                />
+              </PromptInputBody>
+              <PromptInputFooter>
+                <PromptInputTools />
+                <PromptInputSubmit
+                  disabled={isSubmitDisabled}
+                  onStop={stop}
+                  status={isCreating ? "submitted" : status}
+                />
+              </PromptInputFooter>
+            </PromptInput>
+          </BorderBeam>
         </div>
       </div>
     </div>
