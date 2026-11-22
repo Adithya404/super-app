@@ -25,6 +25,8 @@ function resolveStableRowId(row: Record<string, unknown>): string {
   if (typeof row._cid === "string" && row._cid) return row._cid;
   if (typeof row._id === "string" && row._id) return row._id;
   if (row.id != null && row.id !== "") return String(row.id);
+  if (row.domainId != null && row.domainId !== "") return String(row.domainId);
+  if (row.resourceId != null && row.resourceId !== "") return String(row.resourceId);
   // Composite PK used by UserRoles (email + roleCode)
   if (row.email != null && row.roleCode != null) {
     return `${String(row.email)}::${String(row.roleCode)}`;

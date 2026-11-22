@@ -19,9 +19,13 @@ import { RolesDS } from "./definitions/admin/RolesDS";
 import { SessionsDS } from "./definitions/admin/SessionsDS";
 import { UserRolesDS } from "./definitions/admin/UserRolesDS";
 import { UsersDS } from "./definitions/admin/UsersDS";
+import { SbDomainsDS } from "./definitions/sabre/SbDomainsDS";
+import { SbKnowledgeResourcesDS } from "./definitions/sabre/SbKnowledgeResourcesDS";
 
 registerDataSource(MigrationsDS);
 registerDataSource(RolesDS);
 registerDataSource(UsersDS);
 registerDataSource(UserRolesDS);
 registerDataSource(SessionsDS);
+registerDataSource(SbDomainsDS);
+registerDataSource(SbKnowledgeResourcesDS);

@@ -5,6 +5,8 @@ import { auth } from "@/auth";
 import { buildDataSourceQuery, parseQueryFromSearchParams } from "@/lib/common/ds/query-builder";
 import { getDataSource } from "@/lib/common/ds/registry";
 import { pool } from "@/lib/db";
+import { persistKnowledgeResourceRow } from "@/lib/server/sabre/ds-knowledge-resources";
+import { prepareDomainInsertRow } from "@/lib/server/sabre/ds-sb-domains";
 
 export async function GET(
   request: NextRequest,
@@ -102,7 +104,45 @@ export async function POST(
     try {
       await client.query("BEGIN");
       for (const row of rows) {
+        if (row._status === "D") {
+          if (datasourceId === "SbKnowledgeResources") {
+            await persistKnowledgeResourceRow(row, session);
+            results.push({ _cid: row._cid, resourceId: row.resourceId });
+            continue;
+          }
+
+          const primaryAttrs = ds.attributes.filter((attr) => attr.primary);
+          if (primaryAttrs.length === 0) {
+            continue;
+          }
+          const whereParts: string[] = [];
+          const deleteValues: unknown[] = [];
+          let deleteIndex = 1;
+          for (const attr of primaryAttrs) {
+            if ("isCalculated" in attr && attr.isCalculated) continue;
+            const keyValue =
+              (row._orig as Record<string, unknown> | undefined)?.[attr.code] ?? row[attr.code];
+            whereParts.push(`"${attr.column}" = $${deleteIndex++}`);
+            deleteValues.push(keyValue);
+          }
+          const deleteSql = `DELETE FROM ${schemaPrefix}"${ds.tableName}" WHERE ${whereParts.join(" AND ")}`;
+          await client.query(deleteSql, deleteValues);
+          results.push({ _cid: row._cid });
+          continue;
+        }
+
+        if (datasourceId === "SbKnowledgeResources") {
+          const persisted = await persistKnowledgeResourceRow(row, session);
+          const mappedRow: Record<string, unknown> = { _cid: row._cid, ...persisted };
+          results.push(mappedRow);
+          continue;
+        }
+
         if (row._status === "I") {
+          if (datasourceId === "SbDomains") {
+            Object.assign(row, prepareDomainInsertRow(row));
+          }
+
           const columnsToInsert: string[] = [];
           const valuesToInsert: unknown[] = [];
           const placeholders: string[] = [];

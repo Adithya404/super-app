@@ -3,6 +3,7 @@ import { generateEmbedding, generateEmbeddings, toPgVectorLiteral } from "@/lib/
 import { sabrePool } from "@/lib/db";
 
 export type CreateResourceParams = {
+  resourceId?: string;
   title?: string;
   content: string;
   createdBy?: string;
@@ -31,6 +32,7 @@ export type KnowledgeResourceListItem = {
 };
 
 export async function createResource({
+  resourceId: resourceIdParam,
   title,
   content,
   createdBy,
@@ -46,7 +48,7 @@ export async function createResource({
     throw new Error("Content produced no embeddable chunks");
   }
 
-  const resourceId = generateId();
+  const resourceId = resourceIdParam?.trim() || generateId();
   const client = await sabrePool.connect();
 
   try {
@@ -143,6 +145,57 @@ export async function listResources(domainId: string): Promise<KnowledgeResource
     chunkCount: Number(row.chunk_count),
     domainId: row.domain_id,
   }));
+}
+
+export async function updateResource({
+  resourceId,
+  domainId,
+  title,
+  content,
+}: {
+  resourceId: string;
+  domainId: string;
+  title?: string | null;
+  content: string;
+}): Promise<CreateResourceResult> {
+  const trimmed = content.trim();
+  if (!trimmed) {
+    throw new Error("Content is required");
+  }
+
+  const chunks = await generateEmbeddings(trimmed);
+  if (chunks.length === 0) {
+    throw new Error("Content produced no embeddable chunks");
+  }
+
+  const client = await sabrePool.connect();
+
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `UPDATE sb_resource
+       SET title = $1, content = $2
+       WHERE resource_id = $3 AND domain_id = $4`,
+      [title?.trim() || null, trimmed, resourceId, domainId],
+    );
+    await client.query(`DELETE FROM sb_embedding WHERE resource_id = $1`, [resourceId]);
+
+    for (const chunk of chunks) {
+      await client.query(
+        `INSERT INTO sb_embedding (embedding_id, resource_id, content, embedding)
+         VALUES ($1, $2, $3, $4::vector)`,
+        [generateId(), resourceId, chunk.content, toPgVectorLiteral(chunk.embedding)],
+      );
+    }
+
+    await client.query("COMMIT");
+    return { resourceId, chunkCount: chunks.length };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function deleteResource(resourceId: string, domainId: string): Promise<boolean> {
