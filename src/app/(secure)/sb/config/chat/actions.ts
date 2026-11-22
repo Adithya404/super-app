@@ -11,6 +11,7 @@ import {
   setChatVisibility,
   updateChatTitle,
 } from "@/lib/ai/chat-store";
+import { requireDomainBySlug } from "@/lib/ai/domain-store";
 import {
   type CreateResourceResult,
   createResource,
@@ -27,10 +28,11 @@ async function requireUserId(): Promise<string> {
   return session.user.id;
 }
 
-export async function createChatSession(id: string): Promise<string> {
+export async function createChatSession(id: string, domainSlug: string): Promise<string> {
   const userId = await requireUserId();
   assertValidChatId(id);
-  return createChat(id, userId);
+  const domain = await requireDomainBySlug(domainSlug);
+  return createChat(id, userId, domain.domainId);
 }
 
 export async function getChatTitle(chatId: string): Promise<string | null> {
@@ -81,33 +83,54 @@ export async function deleteChatSession(chatId: string): Promise<void> {
 export async function createKnowledgeResource(input: {
   title?: string;
   content: string;
+  domainSlug: string;
 }): Promise<CreateResourceResult> {
   const userId = await requireUserId();
   const content = input.content.trim();
   if (!content) {
     throw new Error("Content is required");
   }
+  const domain = await requireDomainBySlug(input.domainSlug);
 
   return createResource({
     title: input.title,
     content,
     createdBy: userId,
+    domainId: domain.domainId,
   });
 }
 
-export async function listKnowledgeResources(): Promise<KnowledgeResourceListItem[]> {
+export async function listKnowledgeResources(
+  domainSlug: string,
+): Promise<KnowledgeResourceListItem[]> {
   await requireUserId();
-  return listResources();
+  const domain = await requireDomainBySlug(domainSlug);
+  return listResources(domain.domainId);
 }
 
-export async function deleteKnowledgeResource(resourceId: string): Promise<void> {
+export async function deleteKnowledgeResource(
+  resourceId: string,
+  domainSlug: string,
+): Promise<void> {
   await requireUserId();
   const trimmed = resourceId.trim();
   if (!trimmed) {
     throw new Error("Resource ID is required");
   }
-  const deleted = await deleteResource(trimmed);
+  const domain = await requireDomainBySlug(domainSlug);
+  const deleted = await deleteResource(trimmed, domain.domainId);
   if (!deleted) {
     throw new Error("Resource not found");
   }
+}
+
+export async function getKnowledgeDomain(domainSlug: string) {
+  await requireUserId();
+  return requireDomainBySlug(domainSlug);
+}
+
+export async function listChatDomains() {
+  await requireUserId();
+  const { listActiveDomains } = await import("@/lib/ai/domain-store");
+  return listActiveDomains();
 }

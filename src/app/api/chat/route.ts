@@ -12,6 +12,7 @@ import {
   saveChat,
   updateChatTitle,
 } from "@/lib/ai/chat-store";
+import { getDomainById } from "@/lib/ai/domain-store";
 import {
   fallbackTitleFromPrompt,
   generateTitleFromUserMessage,
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
     return new Response("Invalid request", { status: 400 });
   }
 
-  const { id, message } = parsed.data;
+  const { id, message, selectedDomain } = parsed.data;
 
   try {
     assertValidChatId(id);
@@ -72,6 +73,20 @@ export async function POST(req: Request) {
   }
 
   const meta = await getChatMeta(id);
+  const domainId = meta?.domainId ?? selectedDomain;
+  if (!domainId) {
+    return new Response("Domain is required", { status: 400 });
+  }
+
+  if (meta && selectedDomain && selectedDomain !== meta.domainId) {
+    return new Response("Chat domain mismatch", { status: 403 });
+  }
+
+  const domain = await getDomainById(domainId);
+  if (!domain) {
+    return new Response("Invalid domain", { status: 400 });
+  }
+
   const needsTitle = !meta?.title;
   const incomingText = extractTextFromParts(message.parts as ChatUIMessage["parts"]);
 
@@ -91,6 +106,7 @@ export async function POST(req: Request) {
     options: {
       requestId: id,
       escalated: false,
+      domainId,
       getWeather: {
         apiKey: "1234567890",
         accountId: "acct_123",

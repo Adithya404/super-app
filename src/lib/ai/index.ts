@@ -25,6 +25,18 @@ export {
   updateChatTitle,
 } from "@/lib/ai/chat-store";
 export {
+  assertValidDomainSlug,
+  DEFAULT_DOMAIN_SLUG,
+  DomainNotFoundError,
+  type SabreDomain,
+} from "@/lib/ai/domain";
+export {
+  getDomainById,
+  getDomainBySlug,
+  listActiveDomains,
+  requireDomainBySlug,
+} from "@/lib/ai/domain-store";
+export {
   fallbackTitleFromPrompt,
   generateTitleFromUserMessage,
 } from "@/lib/ai/generate-chat-title";

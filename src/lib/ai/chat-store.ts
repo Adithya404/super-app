@@ -14,6 +14,8 @@ export type ChatListItem = {
   updatedAt: string;
   isFavorite: boolean;
   visibility: ChatVisibility;
+  domainId: string;
+  domainSlug: string;
 };
 
 export type ChatMeta = {
@@ -23,6 +25,8 @@ export type ChatMeta = {
   isFavorite: boolean;
   visibility: ChatVisibility;
   userId: string;
+  domainId: string;
+  domainSlug: string;
 };
 
 export class ChatNotFoundError extends Error {
@@ -45,14 +49,18 @@ export function assertValidChatId(id: string): void {
   }
 }
 
-export async function createChat(chatId: string, userId: string): Promise<string> {
+export async function createChat(
+  chatId: string,
+  userId: string,
+  domainId: string,
+): Promise<string> {
   assertValidChatId(chatId);
 
   await sabrePool.query(
-    `INSERT INTO sb_chat (chat_id, user_id)
-     VALUES ($1, $2)
+    `INSERT INTO sb_chat (chat_id, user_id, domain_id)
+     VALUES ($1, $2, $3)
      ON CONFLICT (chat_id) DO NOTHING`,
-    [chatId, userId],
+    [chatId, userId, domainId],
   );
 
   return chatId;
@@ -91,10 +99,14 @@ export async function getChatMeta(chatId: string): Promise<ChatMeta | null> {
     updated_at: Date;
     is_favorite: boolean;
     visibility: string;
+    domain_id: string;
+    domain_slug: string;
   }>(
-    `SELECT chat_id, user_id, title, updated_at, is_favorite, visibility
-     FROM sb_chat
-     WHERE chat_id = $1`,
+    `SELECT c.chat_id, c.user_id, c.title, c.updated_at, c.is_favorite, c.visibility,
+            c.domain_id, d.slug AS domain_slug
+     FROM sb_chat c
+     INNER JOIN sb_domain d ON d.domain_id = c.domain_id
+     WHERE c.chat_id = $1`,
     [chatId],
   );
 
@@ -110,15 +122,19 @@ export async function getChatMeta(chatId: string): Promise<ChatMeta | null> {
     updatedAt: row.updated_at.toISOString(),
     isFavorite: row.is_favorite,
     visibility: row.visibility === "public" ? "public" : "private",
+    domainId: row.domain_id,
+    domainSlug: row.domain_slug,
   };
 }
 
 export async function listChats({
   userId,
+  domainId,
   limit = CHAT_HISTORY_PAGE_SIZE,
   endingBefore,
 }: {
   userId: string;
+  domainId?: string;
   limit?: number;
   endingBefore?: string;
 }): Promise<{ chats: ChatListItem[]; hasMore: boolean }> {
@@ -131,7 +147,11 @@ export async function listChats({
     updated_at: Date;
     is_favorite: boolean;
     visibility: string;
+    domain_id: string;
+    domain_slug: string;
   }>;
+
+  const domainScope = domainId ?? null;
 
   if (endingBefore) {
     assertValidChatId(endingBefore);
@@ -152,14 +172,19 @@ export async function listChats({
       updated_at: Date;
       is_favorite: boolean;
       visibility: string;
+      domain_id: string;
+      domain_slug: string;
     }>(
-      `SELECT chat_id, title, updated_at, is_favorite, visibility
-       FROM sb_chat
-       WHERE user_id = $1
-         AND (updated_at, chat_id) < ($2::timestamptz, $3::text)
-       ORDER BY updated_at DESC, chat_id DESC
-       LIMIT $4`,
-      [userId, cursorRow.updated_at, cursorRow.chat_id, fetchLimit],
+      `SELECT c.chat_id, c.title, c.updated_at, c.is_favorite, c.visibility,
+              c.domain_id, d.slug AS domain_slug
+       FROM sb_chat c
+       INNER JOIN sb_domain d ON d.domain_id = c.domain_id
+       WHERE c.user_id = $1
+         AND ($2::text IS NULL OR c.domain_id = $2)
+         AND (c.updated_at, c.chat_id) < ($3::timestamptz, $4::text)
+       ORDER BY c.updated_at DESC, c.chat_id DESC
+       LIMIT $5`,
+      [userId, domainScope, cursorRow.updated_at, cursorRow.chat_id, fetchLimit],
     );
     rows = result.rows;
   } else {
@@ -169,13 +194,18 @@ export async function listChats({
       updated_at: Date;
       is_favorite: boolean;
       visibility: string;
+      domain_id: string;
+      domain_slug: string;
     }>(
-      `SELECT chat_id, title, updated_at, is_favorite, visibility
-       FROM sb_chat
-       WHERE user_id = $1
-       ORDER BY updated_at DESC, chat_id DESC
-       LIMIT $2`,
-      [userId, fetchLimit],
+      `SELECT c.chat_id, c.title, c.updated_at, c.is_favorite, c.visibility,
+              c.domain_id, d.slug AS domain_slug
+       FROM sb_chat c
+       INNER JOIN sb_domain d ON d.domain_id = c.domain_id
+       WHERE c.user_id = $1
+         AND ($2::text IS NULL OR c.domain_id = $2)
+       ORDER BY c.updated_at DESC, c.chat_id DESC
+       LIMIT $3`,
+      [userId, domainScope, fetchLimit],
     );
     rows = result.rows;
   }
@@ -191,6 +221,8 @@ export async function listChats({
       updatedAt: row.updated_at.toISOString(),
       isFavorite: row.is_favorite,
       visibility: row.visibility === "public" ? "public" : "private",
+      domainId: row.domain_id,
+      domainSlug: row.domain_slug,
     })),
   };
 }

@@ -1,5 +1,7 @@
-import Chat from "./page-content";
+import { redirect } from "next/navigation";
+import { DEFAULT_DOMAIN_SLUG } from "@/lib/ai/domain";
+import { chatBasePath } from "./chat-path";
 
 export default function Page() {
-  return <Chat isNewChat />;
+  redirect(chatBasePath(DEFAULT_DOMAIN_SLUG));
 }

@@ -24,11 +24,12 @@ import {
 } from "../actions";
 
 type KnowledgeBaseDialogProps = {
+  domainSlug: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
 
-export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogProps) {
+export function KnowledgeBaseDialog({ domainSlug, open, onOpenChange }: KnowledgeBaseDialogProps) {
   const [resources, setResources] = useState<KnowledgeResourceListItem[]>([]);
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [title, setTitle] = useState("");
@@ -39,14 +40,14 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
   const loadResources = useCallback(async () => {
     setIsLoadingList(true);
     try {
-      const rows = await listKnowledgeResources();
+      const rows = await listKnowledgeResources(domainSlug);
       setResources(rows);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to load knowledge base");
     } finally {
       setIsLoadingList(false);
     }
-  }, []);
+  }, [domainSlug]);
 
   useEffect(() => {
     if (!open) {
@@ -77,6 +78,7 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
         const result = await createKnowledgeResource({
           title: title.trim() || undefined,
           content: trimmedContent,
+          domainSlug,
         });
         toast.success(`Added to knowledge base (${result.chunkCount} chunk(s))`);
         setTitle("");
@@ -92,7 +94,7 @@ export function KnowledgeBaseDialog({ open, onOpenChange }: KnowledgeBaseDialogP
     setDeletingId(resourceId);
     void (async () => {
       try {
-        await deleteKnowledgeResource(resourceId);
+        await deleteKnowledgeResource(resourceId, domainSlug);
         toast.success("Resource deleted");
         await loadResources();
       } catch (error) {

@@ -8,6 +8,7 @@ const messagePartSchema = z
 
 export const postChatRequestSchema = z.object({
   id: z.string().min(1),
+  selectedDomain: z.string().min(1).optional(),
   message: z.object({
     id: z.string().min(1),
     role: z.literal("user"),

@@ -3,12 +3,18 @@ import { mutate } from "swr";
 export const CHAT_HISTORY_PAGE_SIZE = 20;
 export const CHAT_HISTORY_KEY_PREFIX = "/api/chat/history";
 
-export function chatHistoryPageUrl(endingBefore?: string): string {
+export function chatHistoryPageUrl(options?: {
+  domainSlug?: string;
+  endingBefore?: string;
+}): string {
   const params = new URLSearchParams({
     limit: String(CHAT_HISTORY_PAGE_SIZE),
   });
-  if (endingBefore) {
-    params.set("ending_before", endingBefore);
+  if (options?.domainSlug) {
+    params.set("domain", options.domainSlug);
+  }
+  if (options?.endingBefore) {
+    params.set("ending_before", options.endingBefore);
   }
   return `${CHAT_HISTORY_KEY_PREFIX}?${params.toString()}`;
 }

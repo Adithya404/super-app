@@ -35,8 +35,10 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { chatBasePath, parseChatPathname } from "@/app/(secure)/sb/config/chat/chat-path";
 import { ChatHistoryPanel } from "@/app/(secure)/sb/config/chat/components/chat-sidebar";
 import { KnowledgeBaseDialog } from "@/app/(secure)/sb/config/chat/components/knowledge-base-dialog";
+import { DEFAULT_DOMAIN_SLUG } from "@/lib/ai/domain";
 import { Button } from "../ui/button";
 import { SidebarUserFooter } from "./SidebarUserFooter";
 import { TeamSwitcher } from "./TeamSwitcher";
@@ -135,6 +137,8 @@ export default function Sidebar() {
   }
 
   const isSabreChat = pathname.startsWith("/sb/config/chat");
+  const chatPath = parseChatPathname(pathname);
+  const chatDomainSlug = chatPath.domainSlug ?? DEFAULT_DOMAIN_SLUG;
 
   const moduleNav = activeTeam.modules.flatMap((mod) =>
     mod.pageGroups.map((group) => {
@@ -230,7 +234,7 @@ export default function Sidebar() {
               className="w-full justify-start gap-2 border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white"
               variant="outline"
             >
-              <Link href="/sb/config/chat">
+              <Link href={chatBasePath(chatDomainSlug)}>
                 <Plus size={16} />
                 New Chat
               </Link>
@@ -246,7 +250,11 @@ export default function Sidebar() {
             </Button>
           </div>
 
-          <KnowledgeBaseDialog open={knowledgeOpen} onOpenChange={setKnowledgeOpen} />
+          <KnowledgeBaseDialog
+            domainSlug={chatDomainSlug}
+            open={knowledgeOpen}
+            onOpenChange={setKnowledgeOpen}
+          />
 
           {/* Scrollable chat history window (Command Center pattern) */}
           <ChatHistoryPanel />

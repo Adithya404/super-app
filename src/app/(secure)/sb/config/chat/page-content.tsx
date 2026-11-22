@@ -6,7 +6,7 @@ import { BorderBeam } from "border-beam";
 import { FileIcon, MessageSquareIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { BundledLanguage } from "shiki";
 import {
   Artifact,
@@ -52,9 +52,11 @@ import {
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
 import { useBreadcrumbTrail } from "@/components/layout/breadcrumb-trail";
-import type { ChatUIMessage } from "@/lib/ai";
+import type { ChatUIMessage } from "@/lib/ai/agents/basic-agent";
+import type { SabreDomain } from "@/lib/ai/domain";
 import { createChatSession, getChatTitle } from "./actions";
 import { revalidateChatHistory } from "./chat-history-keys";
+import { chatThreadPath } from "./chat-path";
 import { ChatPromptSubmit } from "./components/chat-prompt-submit";
 import {
   ChatThinkingOrb,
@@ -64,6 +66,7 @@ import {
   resolveChatOrbState,
 } from "./components/chat-thinking-orb";
 import { ChatWelcome } from "./components/chat-welcome";
+import { DomainBadge } from "./components/domain-badge";
 import { getArtifactFilename, getToolUI } from "./components/tool-ui-registry";
 import { getToolStepStatus } from "./orb-state";
 
@@ -286,6 +289,8 @@ function ToolResultArtifact({
 }
 
 interface ChatProps {
+  domain: SabreDomain;
+  domains: SabreDomain[];
   chatId?: string;
   initialMessages?: ChatUIMessage[];
   initialTitle?: string | null;
@@ -293,6 +298,8 @@ interface ChatProps {
 }
 
 export default function Chat({
+  domain,
+  domains,
   chatId,
   initialMessages = [],
   initialTitle = null,
@@ -309,6 +316,11 @@ export default function Chat({
     return () => setTrailSegment(null);
   }, [chatId, initialTitle, isNewChat, setTrailSegment]);
 
+  const domainIdRef = useRef(domain.domainId);
+  useEffect(() => {
+    domainIdRef.current = domain.domainId;
+  }, [domain.domainId]);
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport<ChatUIMessage>({
@@ -321,6 +333,7 @@ export default function Chat({
           return {
             body: {
               id,
+              selectedDomain: domainIdRef.current,
               message: {
                 id: message.id,
                 role: message.role,
@@ -364,9 +377,9 @@ export default function Chat({
       setIsCreating(true);
       try {
         const newId = generateId();
-        await createChatSession(newId);
+        await createChatSession(newId, domain.slug);
         sessionStorage.setItem(PENDING_MESSAGE_KEY, message.text);
-        router.replace(`/sb/config/chat/${newId}`);
+        router.replace(chatThreadPath(domain.slug, newId));
       } finally {
         setIsCreating(false);
       }
@@ -403,156 +416,163 @@ export default function Chat({
     lastMessageToolCount === 0;
 
   return (
-    <div className="relative h-full min-h-0 w-full">
-      <Conversation key={chatId ?? "new"} className="absolute inset-0" initial="instant">
-        <ConversationContent className="mx-auto w-full max-w-3xl px-4 pt-4 pb-36 md:px-6">
-          {showWelcome ? (
-            <ChatWelcome onSuggestionClick={setInput} />
-          ) : showEmptyState ? (
-            <ConversationEmptyState
-              description="Ask anything or search the web for the latest info."
-              icon={<MessageSquareIcon className="size-6" />}
-              title="Start a conversation"
-            />
-          ) : (
-            messages.map((message) => {
-              const toolParts = message.parts.filter(isToolUIPart);
-              const isLastMessage = message.id === messages.at(-1)?.id;
-              const isWorking = status !== "ready" && isLastMessage && message.role === "assistant";
-              const hasActiveTool = toolParts.some(
-                (part) => getToolStepStatus(part.state) === "active",
-              );
-              const workingOrbState = hasActiveTool
-                ? resolveActiveOrbState(toolParts)
-                : status === "streaming"
-                  ? "composing"
-                  : "working";
+    <div className="relative flex h-full min-h-0 w-full flex-col">
+      <DomainBadge className="shrink-0" domain={domain} domains={domains} />
+      <div className="relative min-h-0 flex-1">
+        <Conversation key={chatId ?? "new"} className="absolute inset-0" initial="instant">
+          <ConversationContent className="mx-auto w-full max-w-3xl px-4 pt-4 pb-36 md:px-6">
+            {showWelcome ? (
+              <ChatWelcome onSuggestionClick={setInput} />
+            ) : showEmptyState ? (
+              <ConversationEmptyState
+                description="Ask anything or search the web for the latest info."
+                icon={<MessageSquareIcon className="size-6" />}
+                title="Start a conversation"
+              />
+            ) : (
+              messages.map((message) => {
+                const toolParts = message.parts.filter(isToolUIPart);
+                const isLastMessage = message.id === messages.at(-1)?.id;
+                const isWorking =
+                  status !== "ready" && isLastMessage && message.role === "assistant";
+                const hasActiveTool = toolParts.some(
+                  (part) => getToolStepStatus(part.state) === "active",
+                );
+                const workingOrbState = hasActiveTool
+                  ? resolveActiveOrbState(toolParts)
+                  : status === "streaming"
+                    ? "composing"
+                    : "working";
 
-              return (
-                <Message from={message.role} key={message.id}>
-                  <MessageContent>
-                    {toolParts.length > 0 && (
-                      <ChainOfThought defaultOpen={isWorking}>
-                        <ChainOfThoughtHeader
-                          leading={
-                            isWorking ? (
-                              <ChatThinkingOrb size={20} state={workingOrbState} />
-                            ) : undefined
-                          }
-                        >
-                          {isWorking ? "Thinking..." : "Chain of Thought"}
-                        </ChainOfThoughtHeader>
-                        <ChainOfThoughtContent>
-                          {toolParts.map((part) => {
-                            const name = getToolName(part);
-                            const toolUI = getToolUI(name);
-                            const Icon = toolUI.icon;
-                            const stepStatus = getToolStepStatus(part.state);
-                            const stepOrbState = getOrbStateForToolName(name);
+                return (
+                  <Message from={message.role} key={message.id}>
+                    <MessageContent>
+                      {toolParts.length > 0 && (
+                        <ChainOfThought defaultOpen={isWorking}>
+                          <ChainOfThoughtHeader
+                            leading={
+                              isWorking ? (
+                                <ChatThinkingOrb size={20} state={workingOrbState} />
+                              ) : undefined
+                            }
+                          >
+                            {isWorking ? "Thinking..." : "Chain of Thought"}
+                          </ChainOfThoughtHeader>
+                          <ChainOfThoughtContent>
+                            {toolParts.map((part) => {
+                              const name = getToolName(part);
+                              const toolUI = getToolUI(name);
+                              const Icon = toolUI.icon;
+                              const stepStatus = getToolStepStatus(part.state);
+                              const stepOrbState = getOrbStateForToolName(name);
 
-                            return (
-                              <ChainOfThoughtStep
-                                key={part.toolCallId}
-                                icon={
-                                  stepStatus === "active" ? (
-                                    <ChatThinkingOrb size={20} state={stepOrbState} />
-                                  ) : (
-                                    Icon
-                                  )
-                                }
-                                label={toolUI.getLabel(part.input)}
-                                status={stepStatus}
-                                description={
-                                  part.state === "output-error" ? part.errorText : undefined
-                                }
-                              >
-                                {part.state === "output-available" && renderToolOutput(part.output)}
-                              </ChainOfThoughtStep>
-                            );
-                          })}
-                        </ChainOfThoughtContent>
-                      </ChainOfThought>
-                    )}
+                              return (
+                                <ChainOfThoughtStep
+                                  key={part.toolCallId}
+                                  icon={
+                                    stepStatus === "active" ? (
+                                      <ChatThinkingOrb size={20} state={stepOrbState} />
+                                    ) : (
+                                      Icon
+                                    )
+                                  }
+                                  label={toolUI.getLabel(part.input)}
+                                  status={stepStatus}
+                                  description={
+                                    part.state === "output-error" ? part.errorText : undefined
+                                  }
+                                >
+                                  {part.state === "output-available" &&
+                                    renderToolOutput(part.output)}
+                                </ChainOfThoughtStep>
+                              );
+                            })}
+                          </ChainOfThoughtContent>
+                        </ChainOfThought>
+                      )}
 
-                    {message.parts.map((part, i) => {
-                      if (part.type !== "text") return null;
-                      return (
-                        // biome-ignore lint/suspicious/noArrayIndexKey: parts are append-only while streaming, so the index is stable
-                        <MessageResponse key={`${message.id}-text-${i}`}>
-                          {part.text}
-                        </MessageResponse>
-                      );
-                    })}
+                      {message.parts.map((part, i) => {
+                        if (part.type !== "text") return null;
+                        return (
+                          // biome-ignore lint/suspicious/noArrayIndexKey: parts are append-only while streaming, so the index is stable
+                          <MessageResponse key={`${message.id}-text-${i}`}>
+                            {part.text}
+                          </MessageResponse>
+                        );
+                      })}
 
-                    {toolParts.map((part) => {
-                      if (part.state !== "output-available") return null;
-                      const name = getToolName(part);
-                      const toolUI = getToolUI(name);
-                      if (toolUI.showArtifact === false) return null;
-                      return (
-                        <ToolResultArtifact
-                          key={`${part.toolCallId}-artifact`}
-                          name={name}
-                          description={toolUI.getLabel(part.input)}
-                          output={part.output}
-                        />
-                      );
-                    })}
+                      {toolParts.map((part) => {
+                        if (part.state !== "output-available") return null;
+                        const name = getToolName(part);
+                        const toolUI = getToolUI(name);
+                        if (toolUI.showArtifact === false) return null;
+                        return (
+                          <ToolResultArtifact
+                            key={`${part.toolCallId}-artifact`}
+                            name={name}
+                            description={toolUI.getLabel(part.input)}
+                            output={part.output}
+                          />
+                        );
+                      })}
 
-                    {showStreamingComposingRow && isLastMessage && message.role === "assistant" ? (
-                      <div className="flex items-center gap-2 pt-1 text-muted-foreground text-xs">
-                        <ChatThinkingOrb size={20} state="composing" />
-                        <span>{getOrbStateLabel("composing")}…</span>
-                      </div>
-                    ) : null}
-                  </MessageContent>
-                </Message>
-              );
-            })
-          )}
-          {showStandaloneThinkingOrb ? (
-            <Message from="assistant">
-              <MessageContent className="flex-row items-center gap-3 py-1">
-                <ChatThinkingOrb size={64} state={chatOrbState} />
-                <span className="text-muted-foreground text-sm">
-                  {getOrbStateLabel(chatOrbState)}…
-                </span>
-              </MessageContent>
-            </Message>
-          ) : null}
-        </ConversationContent>
-        <ConversationScrollButton className="bottom-28" />
-      </Conversation>
+                      {showStreamingComposingRow &&
+                      isLastMessage &&
+                      message.role === "assistant" ? (
+                        <div className="flex items-center gap-2 pt-1 text-muted-foreground text-xs">
+                          <ChatThinkingOrb size={20} state="composing" />
+                          <span>{getOrbStateLabel("composing")}…</span>
+                        </div>
+                      ) : null}
+                    </MessageContent>
+                  </Message>
+                );
+              })
+            )}
+            {showStandaloneThinkingOrb ? (
+              <Message from="assistant">
+                <MessageContent className="flex-row items-center gap-3 py-1">
+                  <ChatThinkingOrb size={64} state={chatOrbState} />
+                  <span className="text-muted-foreground text-sm">
+                    {getOrbStateLabel(chatOrbState)}…
+                  </span>
+                </MessageContent>
+              </Message>
+            ) : null}
+          </ConversationContent>
+          <ConversationScrollButton className="bottom-28" />
+        </Conversation>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-linear-to-t from-background via-background to-transparent pt-10">
-        <div className="pointer-events-auto mx-auto w-full max-w-3xl px-4 pb-4 md:px-6">
-          <BorderBeam
-            size="md"
-            colorVariant="colorful"
-            strength={0.7}
-            theme={resolvedTheme === "light" ? "light" : "dark"}
-            className="w-full"
-          >
-            <PromptInput onSubmit={handleSubmit}>
-              <PromptInputBody>
-                <PromptInputTextarea
-                  onChange={(e) => setInput(e.currentTarget.value)}
-                  placeholder="Say something..."
-                  value={input}
-                />
-              </PromptInputBody>
-              <PromptInputFooter>
-                <PromptInputTools />
-                <ChatPromptSubmit
-                  chatStatus={status}
-                  disabled={isSubmitDisabled}
-                  isCreating={isCreating}
-                  onStop={stop}
-                  orbState={chatOrbState}
-                />
-              </PromptInputFooter>
-            </PromptInput>
-          </BorderBeam>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-linear-to-t from-background via-background to-transparent pt-10">
+          <div className="pointer-events-auto mx-auto w-full max-w-3xl px-4 pb-4 md:px-6">
+            <BorderBeam
+              size="md"
+              colorVariant="colorful"
+              strength={0.7}
+              theme={resolvedTheme === "light" ? "light" : "dark"}
+              className="w-full"
+            >
+              <PromptInput onSubmit={handleSubmit}>
+                <PromptInputBody>
+                  <PromptInputTextarea
+                    onChange={(e) => setInput(e.currentTarget.value)}
+                    placeholder="Say something..."
+                    value={input}
+                  />
+                </PromptInputBody>
+                <PromptInputFooter>
+                  <PromptInputTools />
+                  <ChatPromptSubmit
+                    chatStatus={status}
+                    disabled={isSubmitDisabled}
+                    isCreating={isCreating}
+                    onStop={stop}
+                    orbState={chatOrbState}
+                  />
+                </PromptInputFooter>
+              </PromptInput>
+            </BorderBeam>
+          </div>
         </div>
       </div>
     </div>

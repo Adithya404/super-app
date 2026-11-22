@@ -52,6 +52,7 @@ import {
   toggleChatFavorite,
 } from "../actions";
 import { chatHistoryPageUrl } from "../chat-history-keys";
+import { chatBasePath, chatThreadPath, parseChatPathname } from "../chat-path";
 
 type ChatHistoryPage = {
   chats: ChatListItem[];
@@ -75,21 +76,26 @@ async function fetchHistory(url: string): Promise<ChatHistoryPage> {
   return response.json() as Promise<ChatHistoryPage>;
 }
 
-function getHistoryKey(pageIndex: number, previousPageData: ChatHistoryPage | null) {
-  if (previousPageData && previousPageData.hasMore === false) {
-    return null;
-  }
+function getHistoryKey(domainSlug: string | null) {
+  return (pageIndex: number, previousPageData: ChatHistoryPage | null) => {
+    if (previousPageData && previousPageData.hasMore === false) {
+      return null;
+    }
 
-  if (pageIndex === 0) {
-    return chatHistoryPageUrl();
-  }
+    if (pageIndex === 0) {
+      return chatHistoryPageUrl(domainSlug ? { domainSlug } : undefined);
+    }
 
-  const lastChat = previousPageData?.chats.at(-1);
-  if (!lastChat) {
-    return null;
-  }
+    const lastChat = previousPageData?.chats.at(-1);
+    if (!lastChat) {
+      return null;
+    }
 
-  return chatHistoryPageUrl(lastChat.chatId);
+    return chatHistoryPageUrl({
+      domainSlug: domainSlug ?? lastChat.domainSlug,
+      endingBefore: lastChat.chatId,
+    });
+  };
 }
 
 function groupChatsByDate(chats: ChatListItem[]): GroupedChats {
@@ -159,7 +165,7 @@ function ChatHistoryGroup({
       <ul>
         {chats.map((chat) => {
           const isActive = chat.chatId === activeChatId;
-          const href = `/sb/config/chat/${chat.chatId}`;
+          const href = chatThreadPath(chat.domainSlug, chat.chatId);
           const title = chat.title?.trim() || "New chat";
 
           return (
@@ -246,13 +252,15 @@ export function ChatHistoryPanel() {
   const { setTrailSegment, trailSegment } = useBreadcrumbTrail();
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  const activeChatId = useMemo(() => {
-    const match = pathname.match(/^\/sb\/config\/chat\/([^/]+)$/);
-    return match?.[1] ?? null;
-  }, [pathname]);
+  const { domainSlug, chatId: activeChatId } = useMemo(
+    () => parseChatPathname(pathname),
+    [pathname],
+  );
+
+  const historyKey = useMemo(() => getHistoryKey(domainSlug), [domainSlug]);
 
   const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite<ChatHistoryPage>(
-    getHistoryKey,
+    historyKey,
     fetchHistory,
     {
       revalidateFirstPage: true,
@@ -340,7 +348,7 @@ export function ChatHistoryPanel() {
       setDeleteTarget(null);
       if (deletedId === activeChatId) {
         setTrailSegment(null);
-        router.push("/sb/config/chat");
+        router.push(domainSlug ? chatBasePath(domainSlug) : "/sb/config/chat");
       }
       await mutate();
     } finally {

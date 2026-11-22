@@ -6,6 +6,7 @@ export type CreateResourceParams = {
   title?: string;
   content: string;
   createdBy?: string;
+  domainId: string;
 };
 
 export type CreateResourceResult = {
@@ -26,12 +27,14 @@ export type KnowledgeResourceListItem = {
   createdBy: string | null;
   createdAt: string;
   chunkCount: number;
+  domainId: string;
 };
 
 export async function createResource({
   title,
   content,
   createdBy,
+  domainId,
 }: CreateResourceParams): Promise<CreateResourceResult> {
   const trimmed = content.trim();
   if (!trimmed) {
@@ -49,9 +52,9 @@ export async function createResource({
   try {
     await client.query("BEGIN");
     await client.query(
-      `INSERT INTO sb_resource (resource_id, title, content, created_by)
-       VALUES ($1, $2, $3, $4)`,
-      [resourceId, title?.trim() || null, trimmed, createdBy ?? null],
+      `INSERT INTO sb_resource (resource_id, title, content, created_by, domain_id)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [resourceId, title?.trim() || null, trimmed, createdBy ?? null, domainId],
     );
 
     for (const chunk of chunks) {
@@ -72,7 +75,10 @@ export async function createResource({
   }
 }
 
-export async function findRelevantContent(question: string, limit = 4): Promise<RelevantContent[]> {
+export async function findRelevantContent(
+  question: string,
+  { domainId, limit = 4 }: { domainId: string; limit?: number },
+): Promise<RelevantContent[]> {
   const trimmed = question.trim();
   if (!trimmed) {
     return [];
@@ -84,14 +90,16 @@ export async function findRelevantContent(question: string, limit = 4): Promise<
     similarity: number;
     resource_id: string;
   }>(
-    `SELECT content,
-            resource_id,
-            1 - (embedding <=> $1::vector) AS similarity
-     FROM sb_embedding
-     WHERE 1 - (embedding <=> $1::vector) > 0.5
-     ORDER BY embedding <=> $1::vector
-     LIMIT $2`,
-    [toPgVectorLiteral(queryEmbedding), limit],
+    `SELECT e.content,
+            e.resource_id,
+            1 - (e.embedding <=> $1::vector) AS similarity
+     FROM sb_embedding e
+     INNER JOIN sb_resource r ON r.resource_id = e.resource_id
+     WHERE r.domain_id = $2
+       AND 1 - (e.embedding <=> $1::vector) > 0.5
+     ORDER BY e.embedding <=> $1::vector
+     LIMIT $3`,
+    [toPgVectorLiteral(queryEmbedding), domainId, limit],
   );
 
   return rows.map((row) => ({
@@ -101,7 +109,7 @@ export async function findRelevantContent(question: string, limit = 4): Promise<
   }));
 }
 
-export async function listResources(): Promise<KnowledgeResourceListItem[]> {
+export async function listResources(domainId: string): Promise<KnowledgeResourceListItem[]> {
   const { rows } = await sabrePool.query<{
     resource_id: string;
     title: string | null;
@@ -109,17 +117,21 @@ export async function listResources(): Promise<KnowledgeResourceListItem[]> {
     created_by: string | null;
     created_at: Date;
     chunk_count: string;
+    domain_id: string;
   }>(
     `SELECT r.resource_id,
             r.title,
             r.content,
             r.created_by,
             r.created_at,
+            r.domain_id,
             COUNT(e.embedding_id)::text AS chunk_count
      FROM sb_resource r
      LEFT JOIN sb_embedding e ON e.resource_id = r.resource_id
+     WHERE r.domain_id = $1
      GROUP BY r.resource_id
      ORDER BY r.created_at DESC`,
+    [domainId],
   );
 
   return rows.map((row) => ({
@@ -129,12 +141,14 @@ export async function listResources(): Promise<KnowledgeResourceListItem[]> {
     createdBy: row.created_by,
     createdAt: row.created_at.toISOString(),
     chunkCount: Number(row.chunk_count),
+    domainId: row.domain_id,
   }));
 }
 
-export async function deleteResource(resourceId: string): Promise<boolean> {
-  const { rowCount } = await sabrePool.query(`DELETE FROM sb_resource WHERE resource_id = $1`, [
-    resourceId,
-  ]);
+export async function deleteResource(resourceId: string, domainId: string): Promise<boolean> {
+  const { rowCount } = await sabrePool.query(
+    `DELETE FROM sb_resource WHERE resource_id = $1 AND domain_id = $2`,
+    [resourceId, domainId],
+  );
   return (rowCount ?? 0) > 0;
 }
