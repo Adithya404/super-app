@@ -1,126 +1,580 @@
 ---
-description: Store pattern for valtio DataSource state management
+description: Store pattern for valtio-based DataSource state management
 globs:
   - "src/**/use-store.ts"
   - "src/**/*-store.ts"
   - "src/**/page-content.tsx"
-  - "src/**/edit-form.tsx"
+  - "src/**/*Form.tsx"
+  - "src/**/*Dialog.tsx"
   - "src/lib/common/store/**/*.ts"
-  - "src/components/layout/common/PageLayoutTemplate.tsx"
 alwaysApply: false
 ---
 
 # Store Pattern
 
-Valtio-based store wrapping DataSource CRUD. Implementation: `src/lib/common/store/`.
+Valtio-based reactive state management that wraps DataSource CRUD operations. Implementation in `src/lib/common/store/`.
 
-## Identity
+## Core Concepts
 
-Stores are shared by key: `${alias}-${datasourceId}-${page}`.
+### Store Identity
+
+Stores are identified by composite key: `${alias}-${datasourceId}-${page}`. **Stores with the same key are shared across the entire app.**
 
 ```typescript
-// Same key → same instance
-useStore({ datasourceId: "Users", page: "users-page", alias: "users-all" });
+// These return the SAME store instance
+const store1 = useStore({ datasourceId: 'Users', page: 'users-page', alias: 'users-list' });
+const store2 = useStore({ datasourceId: 'Users', page: 'users-page', alias: 'users-list' });
+// store1 === store2 ✅
 ```
 
-## Row Status
+**Use different aliases for different configs:**
+
+```typescript
+// ❌ Wrong - second config is ignored (same key)
+const store1 = useStore({ datasourceId: 'Users', page: 'users', alias: 'list', limit: 20 });
+const store2 = useStore({ datasourceId: 'Users', page: 'users', alias: 'list', limit: 50 });
+
+// ✅ Correct - different alias for different configs
+const listStore = useStore({ datasourceId: 'Users', page: 'users', alias: 'users-list', limit: 20 });
+const exportStore = useStore({ datasourceId: 'Users', page: 'users', alias: 'users-export', limit: 1000 });
+```
+
+### Row Status
 
 | Status | Meaning |
 |--------|---------|
 | `Q` | Queried from DB, unchanged |
-| `I` | Insert pending |
-| `U` | Update pending |
-| `D` | Delete pending |
-| `N` | Local-only (not saved) |
+| `I` | Insert (new, pending save) |
+| `U` | Update (modified, pending save) |
+| `D` | Delete (marked for deletion, pending save) |
+| `N` | New (local-only, won't be saved) |
 
-## Custom Hook
+### Automatic UI Updates
+
+After `save()`, **all components using the store update automatically**. Do NOT call `executeQuery()` or `refresh()` after save on the same store.
+
+---
+
+## Store Configuration
+
+### Create a Custom Hook
+
+Always create a custom hook for consistent store configuration:
 
 ```typescript
-// hooks/use-store.ts
-import { useStore as useBaseStore } from "@/lib/common/store";
+// src/app/(secure)/module/feature/hooks/use-store.ts
+import type { Entity } from "@/lib/common/ds/types/module/Entity";
+import { useStore } from "@/lib/common/store";
 
-export function useStore() {
-  return useBaseStore({
-    datasourceId: "Users",
-    page: "users-page",
-    alias: "users-all",
-    limit: 100,
+export function useEntityStore() {
+  return useStore<Entity>({
+    datasourceId: 'Entity',
+    page: 'entity-page',
+    alias: 'entity-list',
+    limit: 20,
     includeCount: true,
     autoQuery: true,
+    sort: { createdAt: -1 },
   });
 }
 ```
 
-### Config by use case
+### Configuration by Use Case
 
-- **List**: `limit: 20`, `includeCount: true`, `autoQuery: true`
-- **Dialog**: separate `alias` (e.g. `users-dialog`), `limit: 1`, `autoQuery: false`
-- **Lookup**: `select`-like projection via filters; `autoQuery: false` or true for options
-
-## Alias Naming
-
-| Pattern | Use |
-|---------|-----|
-| `{module}-list` / `{module}-all` | Lists |
-| `{module}-edit` | Detail/edit |
-| `{module}-dialog` | Dialogs |
-| `{module}-combobox` | Lookups |
-
-## Reactive Hooks (use in render)
-
-| Hook | Use |
-|------|-----|
-| `useCurrentRowSync` | Forms (prevents cursor jump) |
-| `useCurrentRow` | Display-only current row |
-| `useDBRows` | List pages (DB rows) |
-| `useRows` | Lists that include unsaved rows |
-| `useRowValue` | Single field from a row |
-| `useIsStoreLoading` / `useIsStorePosting` / `useIsStoreDirty` | UI state |
+#### List Page Store
 
 ```typescript
-// ❌ Non-reactive during render
-const rows = store.list();
-const row = store.currentRow;
+export function useEntityListStore() {
+  return useStore<Entity>({
+    datasourceId: 'Entity',
+    page: 'entity-page',
+    alias: 'entity-list',
+    limit: 20,              // Page size
+    includeCount: true,     // Enable pagination
+    autoQuery: true,        // Auto-fetch on mount
+    sort: { createdAt: -1 },
+  });
+}
+```
 
-// ✅ Reactive
-const rows = useDBRows(store);
+#### Detail/Edit Page Store
+
+```typescript
+export function useEntityEditStore() {
+  return useStore<Entity>({
+    datasourceId: 'Entity',
+    page: 'entity-detail-page',
+    alias: 'entity-edit',
+    limit: 1,
+    autoQuery: false,  // Manual query with ID
+  });
+}
+```
+
+#### Dialog Form Store
+
+```typescript
+export function useEntityDialogStore() {
+  return useStore<Entity>({
+    datasourceId: 'Entity',
+    page: 'entity-page',
+    alias: 'entity-dialog',  // ⚠️ Different alias from list!
+    limit: 1,
+    autoQuery: false,
+  });
+}
+```
+
+#### ComboboxInput Lookup Store
+
+```typescript
+export function useUserLookupStore() {
+  return useStore<Users>({
+    datasourceId: 'Users',
+    page: 'user-lookup',
+    alias: 'user-combobox',
+    limit: 50,
+    autoQuery: false,
+    select: ['userName', 'displayName', 'email'],  // Only needed fields
+  });
+}
+```
+
+### Sort Priority
+
+Sort values use a **signed priority system**:
+- **Sign** determines direction: positive = ascending, negative = descending
+- **Absolute value** determines priority: `1` = primary, `2` = secondary, etc.
+
+```typescript
+sort: {
+  createdAt: -1,    // Primary sort: descending (newest first)
+  name: 2,          // Secondary sort: ascending (A-Z)
+  status: -3,       // Tertiary sort: descending
+}
+```
+
+---
+
+## Reactive Hooks (Use in Render)
+
+**IMPORTANT: Use these hooks in render, NOT store methods.**
+
+### `useCurrentRowSync` - For Forms (ALWAYS for form fields)
+
+```typescript
+import { useCurrentRowSync, useIsStoreDirty, useIsStorePosting } from '@/lib/common/store';
+
+function EntityForm({ store }: { store: Store<Entity> }) {
+  const row = useCurrentRowSync(store);  // ✅ Sync mode prevents cursor jumping
+  const isDirty = useIsStoreDirty(store);
+  const isPosting = useIsStorePosting(store);
+
+  if (!row) return null;
+
+  return (
+    <form>
+      <TextInput label="Name" store={store} attributeCode="name" required />
+      <Button disabled={isPosting || !isDirty}>Save</Button>
+    </form>
+  );
+}
+```
+
+**Why sync mode?** Sync mode ensures immediate UI updates when typing, preventing cursor jumping in form fields.
+
+### `useDBRows` vs `useRows` - For Lists
+
+```typescript
+import { useDBRows, useRows, useIsStoreLoading } from '@/lib/common/store';
+
+// Use useDBRows for list pages (all rows from DB)
+function EntityList({ store }: { store: Store<Entity> }) {
+  const rows = useDBRows(store);
+  const isLoading = useIsStoreLoading(store);
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <ul>
+      {rows.map((row) => (
+        <li key={row._id}>{row.name}</li>
+      ))}
+    </ul>
+  );
+}
+
+// Use useRows when store includes new/unsaved rows
+function EditableGrid({ store }: { store: Store<Entity> }) {
+  const rows = useRows(store);  // May include status 'I' (new)
+  
+  return rows.map((row) => (
+    <tr key={row._id ?? row._cid}>
+      <td>{row.name?.toUpperCase()}</td>  // Must use optional chaining
+    </tr>
+  ));
+}
+```
+
+### `useRowValue` - For Table Cells
+
+```typescript
+import { useRowValue } from '@/lib/common/store';
+
+function StatusCell({ store, rowId }: { store: Store<Entity>; rowId: string }) {
+  const status = useRowValue(store, rowId, 'status');
+  return <Badge>{status}</Badge>;
+}
+```
+
+### Hooks Reference
+
+| Hook | Purpose | Return Type |
+|------|---------|------------|
+| `useCurrentRowSync` | Current row (sync, for forms) | `Row<T> \| undefined` |
+| `useCurrentRow` | Current row (async) | `Row<T> \| undefined` |
+| `useDBRows` | All rows from DB | `ReadonlyArray<DBRow<T>>` |
+| `useRows` | All rows (includes unsaved) | `ReadonlyArray<Row<T>>` |
+| `useRowValue` | Single field from specific row | `T[K] \| undefined` |
+| `useIsStoreLoading` | Loading state | `boolean` |
+| `useIsStorePosting` | Saving state | `boolean` |
+| `useIsStoreDirty` | Has unsaved changes | `boolean` |
+| `useStoreRowCount` | Total row count (with pagination) | `number \| undefined` |
+
+---
+
+## Store Methods (CRUD)
+
+### Creating New Records
+
+**⚠️ Initialize BEFORE opening dialogs, not in useEffect.**
+
+```typescript
+import { generateUUID } from "@wayvo-ai/core/common";
+
+// ✅ Correct - Initialize in click handler
+const handleAdd = useCallback(() => {
+  store.createNew({
+    partialRecord: { id: generateUUID(), status: 'draft' },  // Set defaults
+  });
+  setIsDialogOpen(true);
+}, [store]);
+
+// ❌ Wrong - Causes timing issues
+useEffect(() => {
+  if (open) {
+    store.createNew({ partialRecord: { status: 'draft' } });
+  }
+}, [open, store]);
+```
+
+### Editing Existing Records
+
+```typescript
+const handleEdit = useCallback((row: Entity) => {
+  store.setCurrentRow(row);  // Or store.setCurrentRowId(row._id)
+  setIsDialogOpen(true);
+}, [store]);
+```
+
+### Updating Field Values
+
+```typescript
+// Update current row
+store.setValue('name', 'New Name');
+
+// Update specific row
+store.setValue('name', 'New Name', rowId);
+
+// Update multiple fields
+store.updateRow(rowId, {
+  name: 'New Name',
+  status: 'active',
+});
+```
+
+### Saving Changes
+
+```typescript
+// Basic save (shows "X rows saved" message)
+const success = await store.save();
+
+// With custom feedback message
+await store.save({ feedback: 'Entity saved successfully' });
+
+// No feedback (silent save)
+await store.save({ feedback: 'NONE' });
+```
+
+**Important:** After `save()`, the store **automatically refreshes**. Do NOT call `executeQuery()` or `refresh()`.
+
+### Deleting Records
+
+```typescript
+// Mark for deletion and save
+await store.deleteRow(rowId);
+await store.save({ feedback: 'Entity deleted' });
+
+// With confirmation
+import { confirmWithUser } from '@/components/ui/...';
+
+const handleDelete = useCallback(async (entity: Entity) => {
+  const confirmed = await confirmWithUser({
+    title: 'Delete Entity',
+    content: `Delete "${entity.name}"? This cannot be undone.`,
+  });
+  if (confirmed) {
+    await store.deleteRow(entity.id);
+    await store.save({ feedback: 'Entity deleted' });
+  }
+}, [store]);
+```
+
+### Querying Data
+
+```typescript
+// Auto-query on mount (via autoQuery: true)
+// OR manual query:
+await store.executeQuery();
+
+// With filters
+await store.executeQuery({
+  query: {
+    match: { projectId: 'abc123' },  // ✅ Use match for equality
+    filters: [{ status: { is: 'active' } }],  // Complex operators
+    sort: { name: 1 },
+  },
+});
+
+// Force refresh (bypass cache)
+await store.executeQuery({ force: true });
+
+// Pagination
+await store.next();         // Next page
+await store.goToPage(2);    // Go to specific page
+```
+
+### Refreshing Data
+
+```typescript
+// Re-fetch with current filters/sort/offset
+await store.refresh();
+
+// Refresh a specific row
+await store.refreshRow(rowId);
+
+// When child store was cascade-deleted
+parentStore.save();
+childStore.refresh();  // Different store, so refresh needed
+```
+
+### Resetting Changes
+
+```typescript
+// Discard all unsaved changes
+store.resetStore();
+
+// Clear all data
+store.clearSync();
+```
+
+---
+
+## Dialog Pattern (Complete)
+
+```typescript
+'use client';
+
+import { useCallback, useState } from 'react';
+import { Popup } from '@/components/ui/popup';
+import { Button } from '@/components/ui/button';
+import { TextInput } from '@/components/ui/text-input';
+import { useCurrentRowSync, useIsStoreDirty, useIsStorePosting } from '@/lib/common/store';
+import type { Entity } from '@/lib/common/ds/types/module/Entity';
+import type { Store } from '@/lib/common/store';
+
+interface Props {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  store: Store<Entity>;
+  editingRow?: Entity | null;
+}
+
+export function EntityDialog({ open, onOpenChange, store, editingRow }: Props) {
+  const row = useCurrentRowSync(store);
+  const isDirty = useIsStoreDirty(store);
+  const isPosting = useIsStorePosting(store);
+
+  const handleSave = async () => {
+    try {
+      const success = await store.save();
+      if (success) {
+        onOpenChange(false);
+      }
+    } catch {
+      // Error already shown via toast
+    }
+  };
+
+  const handleClose = () => {
+    store.resetStore();  // Discard unsaved changes
+    onOpenChange(false);
+  };
+
+  if (!open) return null;
+
+  return (
+    <Popup
+      title={editingRow ? 'Edit Entity' : 'Add Entity'}
+      onClose={handleClose}
+      width={520}
+      height={430}
+      footer={
+        <>
+          <Button variant="outline" onClick={handleClose} disabled={isPosting}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={isPosting || !isDirty || !row}>
+            Save
+          </Button>
+        </>
+      }
+    >
+      {row && (
+        <div className="grid gap-4">
+          <TextInput label="Name" store={store} attributeCode="name" required />
+          <TextInput label="Description" store={store} attributeCode="description" />
+        </div>
+      )}
+    </Popup>
+  );
+}
+
+// Usage in parent
+function ParentComponent() {
+  const store = useEntityDialogStore();
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingRow, setEditingRow] = useState<Entity | null>(null);
+
+  // ✅ Initialize BEFORE opening
+  const handleAdd = useCallback(() => {
+    store.createNew({ partialRecord: { status: 'draft' } });
+    setEditingRow(null);
+    setIsDialogOpen(true);
+  }, [store]);
+
+  const handleEdit = useCallback((row: Entity) => {
+    store.setCurrentRow(row);
+    setEditingRow(row);
+    setIsDialogOpen(true);
+  }, [store]);
+
+  return (
+    <>
+      <Button onClick={handleAdd}>Add Entity</Button>
+      <EntityDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        store={store}
+        editingRow={editingRow}
+      />
+    </>
+  );
+}
+```
+
+---
+
+## Anti-Patterns to Avoid
+
+### ❌ Don't use store methods during render (non-reactive)
+
+```typescript
+// ❌ Wrong - won't re-render when data changes
+function MyComponent({ store }: Props) {
+  const rows = store.rows();
+  const isLoading = store.isLoading();
+  return <div>{rows.length} items</div>;
+}
+
+// ✅ Correct - subscribes to changes
+function MyComponent({ store }: Props) {
+  const rows = useDBRows(store);
+  const isLoading = useIsStoreLoading(store);
+  return <div>{rows.length} items</div>;
+}
+```
+
+### ❌ Don't call executeQuery/refresh after save
+
+```typescript
+// ❌ Wrong - unnecessary, save auto-refreshes
+await store.save();
+await store.executeQuery();
+
+// ✅ Correct - just save
+await store.save({ feedback: 'Saved' });
+
+// ✅ Only refresh a DIFFERENT store (cascade delete)
+await parentStore.save();
+childStore.refresh();  // Different store needed
+```
+
+### ❌ Don't use useCurrentRow for form fields
+
+```typescript
+// ❌ Wrong - causes cursor jumping
+const row = useCurrentRow(store);
+
+// ✅ Correct - sync mode for forms
 const row = useCurrentRowSync(store);
 ```
 
-## CRUD
+### ❌ Don't initialize dialogs in useEffect
 
 ```typescript
-// Create — before opening dialog
-store.createNew({ partialRecord: { status: "draft" } });
-setOpen(true);
+// ❌ Wrong - timing issues
+useEffect(() => {
+  if (open) store.createNew({ ... });
+}, [open]);
 
-// Edit
-store.beginEdit(row); // or setCurrentRow(row)
-setOpen(true);
-
-// Update field
-store.setValue("name", value);
-
-// Save (auto-refreshes; toast via feedback)
-await store.save({ feedback: "User saved" });
-await store.save({ feedback: "NONE" }); // silent
-
-// Delete
-await store.deleteRow(id);
-await store.save({ feedback: "Deleted" });
-
-// Cancel
-store.resetStore();
+// ✅ Correct - initialize in click handler
+const handleAdd = () => {
+  store.createNew({ ... });
+  setOpen(true);
+};
 ```
 
-## Anti-Patterns
+### ❌ Don't create multiple stores with same key
 
-- Don't init `createNew` in `useEffect` when dialog opens — do it in the click handler
-- Don't `executeQuery()` / `refresh()` after `save()` on the **same** store
-- Don't use `useCurrentRow` for form inputs — use `useCurrentRowSync`
-- Don't create two stores with the same key but different configs — change `alias`
+```typescript
+// ❌ Wrong - second config ignored
+const store1 = useStore({ datasourceId: 'Users', alias: 'list', limit: 20 });
+const store2 = useStore({ datasourceId: 'Users', alias: 'list', limit: 50 });
 
-## Same-Store vs View+Staging
+// ✅ Correct - different alias
+const listStore = useStore({ datasourceId: 'Users', alias: 'users-list', limit: 20 });
+const exportStore = useStore({ datasourceId: 'Users', alias: 'users-export', limit: 1000 });
+```
 
-- **Same store**: table + form share one store → `save()` updates UI automatically
-- **View + staging**: edit staging store, then `viewStore.refresh()` / `refreshRow()` after save
+### ❌ Don't skip await on deleteRow
+
+```typescript
+// ❌ Wrong - row only marked for deletion
+store.deleteRow(rowId);
+await store.save();
+
+// ✅ Correct - await both
+await store.deleteRow(rowId);
+await store.save();
+```
+
+---
+
+## Performance Tips
+
+1. Use `select` for ComboboxInput stores — only fetch needed fields
+2. Use `limit` appropriately — don't fetch more than needed
+3. Share stores via same key — avoid duplicate fetches
+4. Use `autoQuery: false` for dialogs/pickers (manual query on demand)
+5. Use `includeCount: true` only when pagination is needed

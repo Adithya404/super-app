@@ -1,3 +1,5 @@
+/* Copyright (c) 2024-present ... */
+
 import { DefaultAttribute, DefaultDataSource } from "../../defaults";
 import type { DataSource } from "../../types";
 
@@ -6,6 +8,7 @@ export const SbDomainsDS: DataSource = {
   id: "SbDomains",
   tableName: "sb_domain",
   schema: "sabre",
+
   attributes: [
     {
       ...DefaultAttribute,
@@ -15,6 +18,7 @@ export const SbDomainsDS: DataSource = {
       column: "domain_id",
       primary: true,
       optional: false,
+      maxLength: 128,
     },
     {
       ...DefaultAttribute,
@@ -40,6 +44,7 @@ export const SbDomainsDS: DataSource = {
       name: "Description",
       type: "Text",
       column: "description",
+      maxLength: 500,
     },
     {
       ...DefaultAttribute,
@@ -56,7 +61,18 @@ export const SbDomainsDS: DataSource = {
       name: "Created At",
       type: "DateTime",
       column: "created_at",
+      optional: false,
+    },
+    {
+      ...DefaultAttribute,
+      code: "createdBy",
+      name: "Created By",
+      type: "Text",
+      column: "created_by",
+      maxLength: 128,
+      optional: false,
     },
   ],
+
   access: [{ roleCode: "admin", type: "Full" }],
 };

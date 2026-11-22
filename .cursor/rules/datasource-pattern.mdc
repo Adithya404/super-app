@@ -1,33 +1,36 @@
 ---
-description: Pattern for creating DataSource definitions
+description: Pattern for creating DataSource definitions with lifecycle hooks
 globs: src/lib/common/ds/**/*.ts
 alwaysApply: false
 ---
 
 # DataSource Pattern
 
-DataSources live under `src/lib/common/ds/definitions/` and register via `src/lib/common/ds/registry.ts`.
+DataSources define schema, permissions, and lifecycle hooks for database tables. They live under `src/lib/common/ds/definitions/` and register via `src/lib/common/ds/registry.ts`.
 
 ## Basic Shape
 
 ```typescript
 import type { DataSource } from "@/lib/common/ds/types";
-import { DefaultAttribute, DefaultDataSource, DefaultFullAccess } from "@/lib/common/ds/defaults";
+import { DefaultAttribute, DefaultDataSource } from "@/lib/common/ds/defaults";
 import type { Entity } from "@/lib/common/ds/types/module/Entity";
 
-export const EntityDataSource: DataSource = {
+export const EntityDataSource: DataSource<Entity> = {
   ...DefaultDataSource,
   id: "Entity",
   tableName: "entity",
+  description: "One row per entity. Written by users on the Entities page.",
   attributes: [
     {
       ...DefaultAttribute,
       code: "id",
       name: "ID",
-      type: "UUID",
+      type: "Text",
       column: "id",
       primary: true,
+      maxLength: 40,
       optional: false,
+      description: "Primary key, UUIDv7 generated on insert.",
     },
     {
       ...DefaultAttribute,
@@ -37,21 +40,192 @@ export const EntityDataSource: DataSource = {
       column: "name",
       maxLength: 120,
       optional: false,
+      description: "Short name shown in lists.",
+    },
+    {
+      ...DefaultAttribute,
+      code: "createdAt",
+      name: "Created At",
+      type: "Date",
+      column: "created_at",
+      optional: false,
+      description: "Timestamp when record was created (auto-populated).",
+    },
+    {
+      ...DefaultAttribute,
+      code: "createdBy",
+      name: "Created By",
+      type: "Text",
+      column: "created_by",
+      maxLength: 128,
+      optional: false,
+      description: "User who created the record (auto-populated).",
     },
   ],
-  access: [{ ...DefaultFullAccess, roleCode: "admin" }],
+  access: {
+    query: "AUTHENTICATED",
+    insert: "AUTHENTICATED",
+    update: "AUTHENTICATED",
+    delete: "AUTHENTICATED",
+  },
 };
+```
+
+## Descriptions (Required)
+
+Every DataSource and every attribute must have a `description`:
+- **DataSource**: what one row represents, who writes it, how it is scoped
+- **Attribute**: what the value means, format/unit, allowed values, relationships
+
+```typescript
+// ❌ Bad
+{ code: 'amount', name: 'Amount', column: 'amount' }
+
+// ✅ Good
+{ 
+  code: 'amount', 
+  name: 'Amount', 
+  column: 'amount',
+  description: 'Amount in USD; decimals allowed.'
+}
+```
+
+## Attribute Types
+
+| Type | Use | Properties |
+|------|-----|-----------|
+| `Text` | String values | `maxLength` |
+| `Number` | Numeric values | `allowDecimals` |
+| `Date` | Date/datetime | - |
+| `Boolean` | True/false | - |
+
+## Lifecycle Hooks
+
+Hooks run in transaction boundaries and validate, transform, or audit data:
+
+### Query Hooks
+
+```typescript
+export const EntityDataSource: DataSource<Entity> = {
+  // Modify query before execution (scope rows by user)
+  preQuery: async ({ query, session, client }) => {
+    if (!session.user.isAdmin) {
+      query.filters = [...(query.filters || []), { userId: { is: session.user.id } }];
+    }
+    return query;
+  },
+
+  // Post-process query results
+  postQuery: async ({ query, rows, session, client }) => {
+    return rows.map(row => ({
+      ...row,
+      displayName: `${row.firstName} ${row.lastName}`,
+    }));
+  },
+};
+```
+
+### Insert/Update/Delete Hooks
+
+```typescript
+import { UserError } from "@wayvo-ai/core/common";
+
+export const EntityDataSource: DataSource<Entity> = {
+  // Validate before insert
+  beforeInsert: async ({ rows, session, client }) => {
+    for (const row of rows) {
+      if (!row.name?.trim()) {
+        throw new UserError('Name is required');
+      }
+      if (!row.status) {
+        row.status = 'draft';  // Set defaults
+      }
+    }
+    return { rows };
+  },
+
+  // Post-insert side effects (notifications, cascade)
+  afterInsert: async ({ rows, session, client }) => {
+    // Runs in same transaction
+    return rows;
+  },
+
+  // Validate before update
+  beforeUpdate: async ({ rows, session, client }) => {
+    for (const row of rows) {
+      if (row.status === 'published' && !row.publishedAt) {
+        row.publishedAt = new Date().toISOString();
+      }
+    }
+    return { rows };
+  },
+
+  // Post-update side effects
+  afterUpdate: async ({ rows, session, client }) => {
+    return rows;
+  },
+
+  // Validate before delete; `previousRows` are from DB
+  beforeDelete: async ({ rows, previousRows, session, client }) => {
+    for (const row of previousRows ?? []) {
+      if (row.isProtected) {
+        throw new UserError('Cannot delete protected records');
+      }
+    }
+    return rows;
+  },
+
+  // Post-delete cleanup (cascade delete)
+  afterDelete: async ({ rows, session, client }) => {
+    return rows;
+  },
+};
+```
+
+### Hook Reference
+
+| Hook | When | Receives | Returns |
+|------|------|----------|---------|
+| `preQuery` | Before query execution | `query, session, client` | Modified `Query<T>` |
+| `postQuery` | After query results | `query, rows, session, client` | Modified `DBRow<T>[]` |
+| `beforeInsert` | Before insert | `rows, session, client` | `{ rows, skipDML? }` |
+| `afterInsert` | After insert | `rows, session, client` | `DBRow<T>[]` |
+| `beforeUpdate` | Before update | `rows, session, client` | `{ rows, skipDML? }` |
+| `afterUpdate` | After update | `rows, session, client` | `DBRow<T>[]` |
+| `beforeDelete` | Before delete | `rows, previousRows, session, client` | `DBRow<T>[]` |
+| `afterDelete` | After delete | `rows, session, client` | `DBRow<T>[]` |
+
+**Important:** 
+- Throw `UserError` for user-facing validation errors; it shows to the user and rolls back the transaction
+- All other errors log to server and show generic message to user
+- Hooks run within the same database transaction as the main operation
+
+## Cascade Delete Pattern
+
+Use `afterDelete` to cleanup related records:
+
+```typescript
+afterDelete: async ({ rows, client }) => {
+  if (rows.length === 0) return rows;
+  
+  for (const row of rows) {
+    const projectId = row.projectId;
+    if (projectId) {
+      await client.query(`DELETE FROM project_tasks WHERE project_id = $1`, [projectId]);
+      await client.query(`DELETE FROM project_roles WHERE project_id = $1`, [projectId]);
+    }
+  }
+  
+  return rows;
+},
 ```
 
 ## Checklist
 
-1. Add TypeScript type in `src/lib/common/ds/types/...`
-2. Add DS definition file
-3. Register in module index + `registry.ts`
-4. Create page `hooks/use-store.ts` pointing at `datasourceId`
-
-## Attribute Types
-
-`Text` | `Number` | `Boolean` | `Date` | `DateTime` | `UUID` | `JSON`
-
-Keep attribute `code` (camelCase) in sync with the entity interface. Column names are snake_case in SQL.
+1. ✅ Add TypeScript type in `src/lib/common/ds/types/module/Entity.ts`
+2. ✅ Add DS definition file with descriptions and hooks
+3. ✅ Register in module index + `src/lib/common/ds/registry.ts`
+4. ✅ Create page `hooks/use-store.ts` pointing at `datasourceId`
+5. ✅ Define `beforeInsert`/`beforeUpdate`/`beforeDelete` hooks if validation is needed
+6. ✅ Define `afterInsert`/`afterUpdate`/`afterDelete` hooks if side effects are needed
+7. ✅ Use `UserError` for all validation failures

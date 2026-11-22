@@ -1,0 +1,253 @@
+---
+description: Permission-based access control pattern
+globs: "src/lib/common/permissions/**"
+alwaysApply: false
+---
+
+# Permissions Pattern
+
+Permission-based access control is **first-class** in DataSources. Permissions are declarative and checked automatically on every query and mutation.
+
+## Permission Definition
+
+Define permissions in `src/lib/common/permissions/index.ts`:
+
+```typescript
+/* Copyright (c) 2024-present ... */
+
+export const APP_PERMISSIONS = {
+  users: {
+    view: 'users:view',       // Read users
+    manage: 'users:manage',   // Create/update users
+    delete: 'users:delete',   // Delete users
+    export: 'users:export',   // Export user list
+  },
+  projects: {
+    view: 'projects:view',
+    manage: 'projects:manage',
+    export: 'projects:export',
+  },
+  // ... more resources
+} as const;
+```
+
+## DataSource Access Control
+
+Each DataSource specifies which permission is required for each operation:
+
+```typescript
+import { APP_PERMISSIONS } from "@/lib/common/permissions";
+
+export const UsersDataSource: DataSource<Users> = {
+  id: 'Users',
+  tableName: 'users',
+  
+  // Simple: same permission for all operations
+  access: {
+    query: APP_PERMISSIONS.users.view,
+    insert: APP_PERMISSIONS.users.manage,
+    update: APP_PERMISSIONS.users.manage,
+    delete: APP_PERMISSIONS.users.delete,
+    export: APP_PERMISSIONS.users.export,
+  },
+};
+```
+
+## Permission Hierarchy Example
+
+For multi-level access:
+
+```typescript
+export const APP_PERMISSIONS = {
+  domains: {
+    view: 'domains:view',           // All users
+    manage: 'domains:manage',       // Admin
+    manageKnowledgeBase: 'domains:manage-kb',  // KB specialist
+    viewAnalytics: 'domains:view-analytics',   // Analytics only
+  },
+};
+
+export const DomainsChatDataSource: DataSource<DomainChat> = {
+  access: {
+    query: APP_PERMISSIONS.domains.view,
+    insert: APP_PERMISSIONS.domains.manage,
+    update: APP_PERMISSIONS.domains.manage,
+    delete: APP_PERMISSIONS.domains.manage,
+    export: APP_PERMISSIONS.domains.viewAnalytics,  // Different export permission
+  },
+};
+```
+
+## Row-Level Access Control (via preQuery)
+
+Restrict rows at query time based on user:
+
+```typescript
+export const ProjectsDataSource: DataSource<Projects> = {
+  preQuery: async ({ query, session, client }) => {
+    // Admin sees all projects
+    if (session.user.isAdmin) {
+      return query;
+    }
+    
+    // Regular users see only their projects
+    query.filters = [
+      ...(query.filters || []),
+      { ownerId: { is: session.user.id } }
+    ];
+    return query;
+  },
+};
+```
+
+## Attribute-Level Permissions
+
+Some fields require additional permissions:
+
+```typescript
+export const UsersDataSource: DataSource<Users> = {
+  attributes: [
+    {
+      ...DefaultAttribute,
+      code: 'email',
+      name: 'Email',
+      column: 'email',
+      requires: { read: APP_PERMISSIONS.users.view },  // Can read if has view
+    },
+    {
+      ...DefaultAttribute,
+      code: 'salary',
+      name: 'Salary',
+      column: 'salary',
+      requires: {
+        read: 'hr:salary-view',    // Special permission to read
+        write: 'hr:salary-manage',  // Special permission to edit
+      },
+    },
+  ],
+};
+```
+
+## Permission Checking in Components
+
+Check permissions before showing UI:
+
+```typescript
+import { authorize } from '@/lib/common/auth';
+import { APP_PERMISSIONS } from '@/lib/common/permissions';
+
+function UserManagementPage({ session }: { session: Session }) {
+  const canDelete = authorize(session, APP_PERMISSIONS.users.delete);
+  const canExport = authorize(session, APP_PERMISSIONS.users.export);
+
+  return (
+    <>
+      {canDelete && <Button onClick={handleBulkDelete}>Delete Selected</Button>}
+      {canExport && <Button onClick={handleExport}>Export</Button>}
+    </>
+  );
+}
+```
+
+## Domain-Scoped Permissions Example
+
+For domain-scoped applications (like Sabre's multi-tenant setup):
+
+```typescript
+export const APP_PERMISSIONS = {
+  domains: {
+    view: 'sb:domains.view',
+    manage: 'sb:domains.manage',
+  },
+  knowledgeBase: {
+    view: 'sb:knowledge.view',
+    manage: 'sb:knowledge.manage',
+  },
+  chat: {
+    view: 'sb:chat.view',
+    create: 'sb:chat.create',
+  },
+};
+
+export const SbDomainsDataSource: DataSource<SabreDomain> = {
+  id: 'SbDomains',
+  tableName: 'sabre.sb_domain',
+  access: {
+    query: APP_PERMISSIONS.domains.view,
+    insert: APP_PERMISSIONS.domains.manage,
+    update: APP_PERMISSIONS.domains.manage,
+    delete: APP_PERMISSIONS.domains.manage,
+  },
+};
+
+export const SbKnowledgeResourcesDataSource: DataSource<SbKnowledgeResource> = {
+  id: 'SbKnowledgeResources',
+  tableName: 'sabre.sb_resource',
+  access: {
+    query: APP_PERMISSIONS.knowledgeBase.view,
+    insert: APP_PERMISSIONS.knowledgeBase.manage,
+    update: APP_PERMISSIONS.knowledgeBase.manage,
+    delete: APP_PERMISSIONS.knowledgeBase.manage,
+  },
+  
+  // Scope to domain in preQuery
+  preQuery: async ({ query, session, client, requestState }) => {
+    const domainId = requestState?.get(DOMAIN_ID_KEY);
+    if (!domainId) {
+      throw new UserError('Domain ID required for knowledge base queries');
+    }
+    
+    query.filters = [
+      ...(query.filters || []),
+      { domainId: { is: domainId } }
+    ];
+    return query;
+  },
+};
+```
+
+## Anti-Patterns
+
+```typescript
+// ❌ Wrong - hardcoding permission check in component
+if (session?.user?.role === 'admin') {
+  // show delete button
+}
+
+// ✅ Correct - use authorized permission
+if (authorize(session, APP_PERMISSIONS.users.delete)) {
+  // show delete button
+}
+
+// ❌ Wrong - no permission on DataSource
+access: { query: 'AUTHENTICATED' },  // Everyone can query - risky
+
+// ✅ Correct - explicit permission
+access: { query: APP_PERMISSIONS.users.view },
+
+// ❌ Wrong - permission granted via code  
+// (would work, but hard to audit and manage)
+preQuery: async ({ session }) => {
+  if (session.user.name === 'specific.user@company.com') {
+    return query;
+  }
+}
+
+// ✅ Correct - permission granted via admin configuration
+preQuery: async ({ session }) => {
+  const hasPermission = authorize(session, APP_PERMISSIONS.resources.view);
+  if (!hasPermission) throw new PermissionRequiredError(...);
+}
+```
+
+## Security Checklist
+
+- [ ] Every DataSource has explicit `access` configuration
+- [ ] No `access: { query: 'AUTHENTICATED' }` without strong justification
+- [ ] Row-level access implemented via `preQuery` hooks
+- [ ] Sensitive fields have `requires: { read, write }` permissions
+- [ ] Permission names follow naming convention (e.g. `users:manage`)
+- [ ] All permissions defined in one place (`src/lib/common/permissions`)
+- [ ] Components check permissions before showing sensitive UI
+- [ ] Delete operations have `beforeDelete` validation hooks
+- [ ] Audit fields (createdBy, updatedBy) auto-populated

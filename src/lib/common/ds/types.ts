@@ -1,7 +1,7 @@
 // src/lib/common/ds/types.ts
 
 import type { QueryFiltersInput } from "./filters";
-import type { Sort } from "./query-builder";
+import type { Query, Sort } from "./query-builder";
 
 export type {
   BooleanFilterOperator,
@@ -61,6 +61,50 @@ export interface DataSource {
   schema?: string;
   attributes: Array<Attribute | CalculatedAttribute>;
   access: Access[];
+
+  // Lifecycle hooks
+  preQuery?: (props: {
+    query: Query;
+    session: Record<string, unknown>;
+    client: unknown;
+  }) => Promise<Query>;
+  postQuery?: (props: {
+    query: Query;
+    rows: Record<string, unknown>[];
+    session: Record<string, unknown>;
+    client: unknown;
+  }) => Promise<Record<string, unknown>[]>;
+  beforeInsert?: (props: {
+    rows: Record<string, unknown>[];
+    session: Record<string, unknown>;
+    client: unknown;
+  }) => Promise<{ rows: Record<string, unknown>[] }>;
+  afterInsert?: (props: {
+    rows: Record<string, unknown>[];
+    session: Record<string, unknown>;
+    client: unknown;
+  }) => Promise<Record<string, unknown>[]>;
+  beforeUpdate?: (props: {
+    rows: Record<string, unknown>[];
+    session: Record<string, unknown>;
+    client: unknown;
+  }) => Promise<{ rows: Record<string, unknown>[] }>;
+  afterUpdate?: (props: {
+    rows: Record<string, unknown>[];
+    session: Record<string, unknown>;
+    client: unknown;
+  }) => Promise<Record<string, unknown>[]>;
+  beforeDelete?: (props: {
+    rows: Record<string, unknown>[];
+    previousRows: Record<string, unknown>[];
+    session: Record<string, unknown>;
+    client: unknown;
+  }) => Promise<Record<string, unknown>[]>;
+  afterDelete?: (props: {
+    rows: Record<string, unknown>[];
+    session: Record<string, unknown>;
+    client: unknown;
+  }) => Promise<Record<string, unknown>[]>;
 }
 
 export interface StoreOptions<T extends object = Record<string, unknown>> {

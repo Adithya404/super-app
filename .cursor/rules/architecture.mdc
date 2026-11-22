@@ -1,0 +1,282 @@
+---
+description: Architecture decisions and patterns
+globs: ""
+alwaysApply: false
+---
+
+# Super-App Architecture
+
+This document explains the architectural patterns used in this codebase.
+
+## Full-Stack Data Layer: DataSource + useStore
+
+The core abstraction is a **vertical stack** where one DataSource definition powers everything:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                      Client Component                    │
+│  (useStore<Entity>, useDBRows, useCurrentRowSync, etc)   │
+└──────────────────┬──────────────────────────────────────┘
+                   │
+       ┌───────────┴────────────┐
+       │                        │
+┌──────▼──────┐        ┌─────────▼──────┐
+│  State Mgmt │        │  Pagination    │
+│  (valtio)   │        │  Sorting       │
+│  Dirty      │        │  Filtering     │
+│  Tracking   │        │  Selection     │
+└──────┬──────┘        └────────┬───────┘
+       └────────────┬───────────┘
+                    │
+         ┌──────────▼──────────┐
+         │   useStore Hook     │
+         │  (DataSource CRUD)  │
+         └──────────┬──────────┘
+                    │
+         ┌──────────▼──────────┐
+         │  /api/ds/[dsId]     │
+         │  (Server Routes)    │
+         └──────────┬──────────┘
+                    │
+         ┌──────────▼──────────────────┐
+         │   DataSource Definition     │
+         │  - preQuery                 │
+         │  - postQuery                │
+         │  - beforeInsert/Update/Del  │
+         │  - afterInsert/Update/Del   │
+         │  - Validation               │
+         │  - Permissions              │
+         └──────────┬───────────────────┘
+                    │
+         ┌──────────▼──────────┐
+         │  SQL Query Builder  │
+         │  (Row-Level Access) │
+         │  (Optimistic Lock)  │
+         │  (Audit Trail)      │
+         └──────────┬──────────┘
+                    │
+         ┌──────────▼──────────┐
+         │  Database (Postgres)│
+         │  Transactions       │
+         │  Migrations         │
+         └─────────────────────┘
+```
+
+## Why This Pattern?
+
+### 1. Single Definition, Full Stack
+
+One `DataSource` definition is the source of truth for:
+- **Schema**: TypeScript interface + attributes
+- **Permissions**: Who can query/insert/update/delete
+- **Validation**: beforeInsert/Update/Delete hooks
+- **Side effects**: afterInsert/Update/Delete hooks
+- **Transformations**: preQuery/postQuery hooks
+- **Audit**: Built-in field-level change tracking
+- **Client state**: Automatically synced via `useStore`
+
+### 2. Vertical Integration Benefits
+
+**Without DataSource pattern:**
+```
+UI Component → React Query → custom API route → manual permissions
+   ↓            ↓             ↓                   ↓
+ useState      queryClient   undefined          middleware
+              deduplication
+```
+
+Requires 4 separate abstractions, each managing its own:
+- Caching strategy
+- Loading/error state
+- Request deduplication
+- Access control
+
+**With DataSource pattern:**
+```
+UI Component → useStore → /api/ds → DataSource hooks → Database
+   ↓            ↓          ↓         ↓
+ Valtio       Automatic   Scoped    Transactions
+ reactivity   pagination  queries   + audit
+              + dirty
+              tracking
+```
+
+One abstraction handles everything seamlessly.
+
+### 3. Lifecycle Hooks Built-In
+
+```typescript
+// BEFORE state reaches database or leaves server
+beforeInsert → validate data
+beforeUpdate → enforce rules, cascade operations
+beforeDelete → cascade delete, permission checks
+
+// AFTER operation succeeds, within same transaction
+afterInsert → send notifications, populate related fields
+afterUpdate → sync to external systems, invalidate caches
+afterDelete → audit logging, cascade cleanup
+```
+
+### 4. Validation with UserError
+
+Throw `UserError` for user-facing validation failures:
+
+```typescript
+beforeDelete: async ({ rows, previousRows, session, client }) => {
+  for (const row of previousRows ?? []) {
+    if (row.isProtected) {
+      throw new UserError('Cannot delete protected records');
+    }
+    // Check for ON DELETE RESTRICT
+    const result = await client.query(
+      `SELECT COUNT(*) as count FROM child_table WHERE parent_id = $1`,
+      [row.id]
+    );
+    if (Number(result.rows[0].count) > 0) {
+      throw new UserError(`${result.rows[0].count} child records still reference this parent`);
+    }
+  }
+  return rows;
+},
+```
+
+User sees: "Cannot delete protected records" or specific count message  
+Developer sees: Validation logic is centralized in one place
+
+## Page Structure Convention
+
+```
+src/app/(secure)/module/feature/
+├── page.tsx                      # Server Component wrapper
+├── page-content.tsx              # Client Component (interactive)
+├── hooks/
+│   ├── use-store.ts             # Store configuration
+│   └── table-columns.tsx        # DataTable column definitions
+├── components/
+│   ├── EditForm.tsx             # Edit/add form
+│   ├── DetailView.tsx           # Detail display
+│   └── ListTable.tsx            # List table
+└── action.ts                    # Server actions (if complex queries)
+```
+
+**Why this layout?**
+- `page.tsx`: Lightweight wrapper, handles async data/auth
+- `page-content.tsx`: Contains all interactivity (client component)
+- `hooks/use-store.ts`: Single source of truth for store config
+- `hooks/table-columns.tsx`: DataTable column definitions
+- `components/`: Feature-specific UI components
+
+## Store Alias Naming Convention
+
+Consistent naming makes store sharing clear:
+
+```typescript
+// List pages
+alias: 'users-list'          // useEntityListStore()
+alias: 'projects-all'        // All projects for switcher
+
+// Edit pages
+alias: 'user-edit'           // Single user edit page
+alias: 'project-detail'      // Project detail view
+
+// Dialogs
+alias: 'user-dialog'         // Add/edit user in modal
+alias: 'add-project-dialog'  // Add project modal
+
+// Lookups/Pickers
+alias: 'user-combobox'       // User lookup for ComboboxInput
+alias: 'role-selector'       // Role selection dropdown
+
+// Context-specific
+alias: 'user-roles-tab'      // Roles within user detail
+alias: 'project-tasks-panel' // Tasks panel in project view
+```
+
+**Rule: If two components load the same datasource with different configs, they need different aliases.**
+
+## Multi-Step Workflows
+
+For workflows with multiple dialogs or pages, initialize the store BEFORE transitioning:
+
+```typescript
+// ❌ Wrong - store initialized during dialog render
+const handleNext = () => {
+  setStep('review');  // Store init happens in useEffect
+};
+
+// ✅ Correct - store initialized before dialog
+const handleNext = () => {
+  store.createNew({ partialRecord: {...} });  // ← Initialize now
+  setStep('review');                          // ← Then navigate
+};
+```
+
+## Optimization Patterns
+
+### 1. Use `select` for Lookup Stores
+
+```typescript
+export function useUserLookupStore() {
+  return useStore<Users>({
+    datasourceId: 'Users',
+    alias: 'user-combobox',
+    select: ['userName', 'displayName', 'email'],  // ← Only these fields
+  });
+}
+```
+
+### 2. Use `limit` Appropriately
+
+```typescript
+// List page: standard page size
+limit: 20
+
+// Export: load all
+limit: 10000
+
+// Combobox: smaller set
+limit: 50
+
+// Single-entity dialog
+limit: 1
+```
+
+### 3. Use `autoQuery` for Auto-Loading
+
+```typescript
+// Auto-load on mount
+autoQuery: true,
+
+// Manual load (wait for user action or props)
+autoQuery: false,
+```
+
+### 4. Use `match` for Scoping
+
+```typescript
+// Don't use usePreQuery for scoping - it registers too late
+usePreQuery(store, (q) => ({
+  ...q,
+  match: { ...q.match, projectId }  // ❌ Scoping via usePreQuery
+}));
+
+// Use match in store config - reaches every query
+const store = useStore({
+  datasourceId: 'Tasks',
+  match: { projectId },  // ✅ Every query includes this filter
+});
+```
+
+---
+
+## When NOT to Use DataSource
+
+Consider alternatives for:
+
+1. **External API calls** → Use React Query or `useQuery` (server action)
+2. **Real-time features** → Use WebSocket + server actions (beyond this pattern)
+3. **Complex aggregations** → Use server action with hand-written SQL
+4. **File upload/download** → Use API routes for streaming
+5. **Admin-only bulk operations** → Use API routes with explicit auth
+
+For everything else, DataSource + useStore is the first choice.

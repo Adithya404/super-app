@@ -1,3 +1,5 @@
+/* Copyright (c) 2024-present ... */
+
 import { DefaultAttribute, DefaultCalculatedAttribute, DefaultDataSource } from "../../defaults";
 import type { CalculatedAttribute, DataSource } from "../../types";
 
@@ -15,6 +17,7 @@ export const SbKnowledgeResourcesDS: DataSource = {
   id: "SbKnowledgeResources",
   tableName: "sb_resource",
   schema: "sabre",
+
   attributes: [
     {
       ...DefaultAttribute,
@@ -24,6 +27,7 @@ export const SbKnowledgeResourcesDS: DataSource = {
       column: "resource_id",
       primary: true,
       optional: false,
+      maxLength: 128,
     },
     {
       ...DefaultAttribute,
@@ -48,6 +52,7 @@ export const SbKnowledgeResourcesDS: DataSource = {
       type: "Text",
       column: "domain_id",
       optional: false,
+      maxLength: 128,
     },
     {
       ...DefaultAttribute,
@@ -55,6 +60,8 @@ export const SbKnowledgeResourcesDS: DataSource = {
       name: "Created By",
       type: "Text",
       column: "created_by",
+      maxLength: 128,
+      optional: false,
     },
     {
       ...DefaultAttribute,
@@ -62,8 +69,17 @@ export const SbKnowledgeResourcesDS: DataSource = {
       name: "Created At",
       type: "DateTime",
       column: "created_at",
+      optional: false,
+    },
+    {
+      ...DefaultAttribute,
+      code: "updatedAt",
+      name: "Updated At",
+      type: "DateTime",
+      column: "updated_at",
     },
     chunkCountAttr,
   ],
+
   access: [{ roleCode: "admin", type: "Full" }],
 };

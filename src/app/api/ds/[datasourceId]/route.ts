@@ -5,8 +5,8 @@ import { auth } from "@/auth";
 import { buildDataSourceQuery, parseQueryFromSearchParams } from "@/lib/common/ds/query-builder";
 import { getDataSource } from "@/lib/common/ds/registry";
 import { pool } from "@/lib/db";
-import { persistKnowledgeResourceRow } from "@/lib/server/sabre/ds-knowledge-resources";
-import { prepareDomainInsertRow } from "@/lib/server/sabre/ds-sb-domains";
+import { postDataSource, UserError } from "@/lib/server/ds/postDataSource";
+import { queryDataSource } from "@/lib/server/ds/queryDataSource";
 
 export async function GET(
   request: NextRequest,
@@ -41,19 +41,30 @@ export async function GET(
     const query = parseQueryFromSearchParams(searchParams);
     const includeCount = query.includeCount ?? searchParams.get("includeCount") === "true";
 
-    const { sql, countSql, values, countValues } = buildDataSourceQuery(ds, query);
-    const result = await pool.query(sql, values);
+    const client = await pool.connect();
+    try {
+      // Use queryDataSource which calls preQuery and postQuery hooks
+      const rows = await queryDataSource(
+        client,
+        session as unknown as Record<string, unknown>,
+        ds,
+        query,
+      );
 
-    let totalCount = 0;
-    if (includeCount) {
-      const countResult = await pool.query(countSql, countValues);
-      totalCount = parseInt(countResult.rows[0].count, 10);
+      let totalCount = 0;
+      if (includeCount) {
+        const { countSql, countValues } = buildDataSourceQuery(ds, query);
+        const countResult = await client.query(countSql, countValues);
+        totalCount = parseInt(countResult.rows[0].count, 10);
+      }
+
+      return NextResponse.json({
+        rows,
+        count: totalCount,
+      });
+    } finally {
+      client.release();
     }
-
-    return NextResponse.json({
-      rows: result.rows,
-      count: totalCount,
-    });
   } catch (error: unknown) {
     console.error("DataStore API Error:", error);
     const message = error instanceof Error ? error.message : "Internal Server Error";
@@ -97,138 +108,46 @@ export async function POST(
       return NextResponse.json({ message: "Invalid request format" }, { status: 400 });
     }
 
-    const results = [];
-    const schemaPrefix = ds.schema ? `"${ds.schema}".` : "";
+    // Special handling for Users (password hashing)
+    if (datasourceId === "Users") {
+      for (const row of rows) {
+        if (row.password) {
+          row.password = await bcrypt.hash(row.password as string, 12);
+        }
+        if (typeof row.email === "string") {
+          row.email = row.email.toLowerCase();
+        }
+      }
+    }
 
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
-      for (const row of rows) {
-        if (row._status === "D") {
-          if (datasourceId === "SbKnowledgeResources") {
-            await persistKnowledgeResourceRow(row, session);
-            results.push({ _cid: row._cid, resourceId: row.resourceId });
-            continue;
-          }
 
-          const primaryAttrs = ds.attributes.filter((attr) => attr.primary);
-          if (primaryAttrs.length === 0) {
-            continue;
-          }
-          const whereParts: string[] = [];
-          const deleteValues: unknown[] = [];
-          let deleteIndex = 1;
-          for (const attr of primaryAttrs) {
-            if ("isCalculated" in attr && attr.isCalculated) continue;
-            const keyValue =
-              (row._orig as Record<string, unknown> | undefined)?.[attr.code] ?? row[attr.code];
-            whereParts.push(`"${attr.column}" = $${deleteIndex++}`);
-            deleteValues.push(keyValue);
-          }
-          const deleteSql = `DELETE FROM ${schemaPrefix}"${ds.tableName}" WHERE ${whereParts.join(" AND ")}`;
-          await client.query(deleteSql, deleteValues);
-          results.push({ _cid: row._cid });
-          continue;
-        }
+      // Use postDataSource which calls all hooks
+      const results = await postDataSource(
+        client,
+        session as unknown as Record<string, unknown>,
+        ds,
+        rows,
+      );
 
-        if (datasourceId === "SbKnowledgeResources") {
-          const persisted = await persistKnowledgeResourceRow(row, session);
-          const mappedRow: Record<string, unknown> = { _cid: row._cid, ...persisted };
-          results.push(mappedRow);
-          continue;
-        }
-
-        if (row._status === "I") {
-          if (datasourceId === "SbDomains") {
-            Object.assign(row, prepareDomainInsertRow(row));
-          }
-
-          const columnsToInsert: string[] = [];
-          const valuesToInsert: unknown[] = [];
-          const placeholders: string[] = [];
-          let paramIndex = 1;
-
-          if (datasourceId === "Users") {
-            if (row.password) {
-              row.password = await bcrypt.hash(row.password as string, 12);
-            }
-            if (typeof row.email === "string") {
-              row.email = row.email.toLowerCase();
-            }
-          }
-
-          ds.attributes.forEach((attr) => {
-            if ("isCalculated" in attr && attr.isCalculated) return;
-            if (row[attr.code] !== undefined) {
-              columnsToInsert.push(`"${attr.column}"`);
-              valuesToInsert.push(row[attr.code]);
-              placeholders.push(`$${paramIndex++}`);
-            }
-          });
-
-          if (columnsToInsert.length > 0) {
-            const insertSql = `INSERT INTO ${schemaPrefix}"${ds.tableName}" (${columnsToInsert.join(
-              ", ",
-            )}) VALUES (${placeholders.join(", ")}) RETURNING *`;
-            const res = await client.query(insertSql, valuesToInsert);
-            const insertedRow = res.rows[0];
-
-            const mappedRow: Record<string, unknown> = { _cid: row._cid };
-            ds.attributes.forEach((attr) => {
-              if ("isCalculated" in attr && attr.isCalculated) return;
-              mappedRow[attr.code] = insertedRow[attr.column];
-            });
-            results.push(mappedRow);
-          }
-        } else if (row._status === "U") {
-          const setClauses: string[] = [];
-          const whereClauses: string[] = [];
-          const valuesToUpdate: unknown[] = [];
-          let paramIndex = 1;
-
-          ds.attributes.forEach((attr) => {
-            if (attr.primary || ("isCalculated" in attr && attr.isCalculated)) return;
-            if (row[attr.code] !== undefined) {
-              setClauses.push(`"${attr.column}" = $${paramIndex++}`);
-              valuesToUpdate.push(row[attr.code]);
-            }
-          });
-
-          ds.attributes.forEach((attr) => {
-            if (!attr.primary) return;
-            const keyValue =
-              (row._orig as Record<string, unknown> | undefined)?.[attr.code] ?? row[attr.code];
-            whereClauses.push(`"${attr.column}" = $${paramIndex++}`);
-            valuesToUpdate.push(keyValue);
-          });
-
-          if (setClauses.length > 0 && whereClauses.length > 0) {
-            const updateSql = `UPDATE ${schemaPrefix}"${ds.tableName}" SET ${setClauses.join(
-              ", ",
-            )} WHERE ${whereClauses.join(" AND ")} RETURNING *`;
-            const res = await client.query(updateSql, valuesToUpdate);
-            const updatedRow = res.rows[0];
-
-            const mappedRow: Record<string, unknown> = { _cid: row._cid };
-            ds.attributes.forEach((attr) => {
-              if ("isCalculated" in attr && attr.isCalculated) return;
-              mappedRow[attr.code] = updatedRow[attr.column];
-            });
-            results.push(mappedRow);
-          }
-        }
-      }
       await client.query("COMMIT");
+      return NextResponse.json(results);
     } catch (e) {
       await client.query("ROLLBACK");
       throw e;
     } finally {
       client.release();
     }
-
-    return NextResponse.json(results);
-  } catch (error: unknown) {
+  } catch (error) {
     console.error("DataStore API POST Error:", error);
+
+    // If UserError, send it directly (validation message)
+    if (error instanceof UserError) {
+      return NextResponse.json({ message: error.message }, { status: 400 });
+    }
+
     const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ message }, { status: 500 });
   }
